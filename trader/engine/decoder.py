@@ -4,8 +4,6 @@ from solana.rpc.api import Client
 from solders.signature import Signature
 from dotenv import load_dotenv
 
-from sympy import diff
-
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
