@@ -15,5 +15,3 @@ def get_whales():
     except Exception as e:
         print(f"Error reading whales.json: {e}")
         return []
-    
-print(get_whales())
