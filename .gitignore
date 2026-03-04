@@ -1,1 +1,3 @@
 trader/.env
+/.vscode
+/trader/__pycache__
