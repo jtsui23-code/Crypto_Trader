@@ -8,10 +8,11 @@ def get_whales():
     try:
         if file_path.exists():
             with open(file_path, 'r') as f:
-                return json.load(f)
+                return json.load(f).get("wallets", [])
         else:
             print(f"Warning: {file_path} not found.")
             return []
+        
     except Exception as e:
         print(f"Error reading whales.json: {e}")
         return []
