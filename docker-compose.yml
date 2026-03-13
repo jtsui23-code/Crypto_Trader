@@ -1,5 +1,24 @@
 services:
-  trader:
-    build: .
+  # Backend
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
     volumes:
       - .:/app
+    environment:
+      - PYTHONPATH=/app/trader
+    command: python -m engine.listener
+
+  # Frontend
+  frontend:
+    build:
+      context: ./trader/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./trader/frontend:/app
+      - /app/node_modules
+    stdin_open: true
+    tty: true
