@@ -23,8 +23,6 @@ Member Variables:
         List of whale wallet objects or addresses loaded from whales.json.
 """
 class WhaleListener:
-
-
     """
     Method Name:
         __init__

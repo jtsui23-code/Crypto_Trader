@@ -276,37 +276,33 @@ class PaperAccount:
         return self.positions
     
 
-
-
 if __name__ == "__main__":
-    # Initialize the account with $10,000 as per your roadmap
+    # Initialize the account with $10,000
     my_account = PaperAccount(initialBalance=10000.0)
     print(f"Account Initialized. Balance: ${my_account.getBalance():.2f}")
 
-    # Simulate finding a Whale trade on Solana (e.g., SOL at $140.00)
-    print("\n--- Executing Copy Trade: SOL ---")
-    success = my_account.executeCopy(token="SOL", price=140.00, amountUSD=1000.0)
-    
-    if success:
-        print(f"Successfully copied trade!")
-        print(f"Current Cash: ${my_account.getBalance():.2f}")
-        print(f"Positions: {my_account.getPositions()}")
+    try:
+        while True:
+            # Execute a simulated trade automatically
+            print(f"\n[{datetime.now().strftime('%H:%M:%S')}] --- Trade Triggered ---")
+            
+            # Mocking a trade: Buying $500 worth of SOL at a mock price of $145.00
+            success = my_account.executeCopy(token="SOL", price=145.00, amountUSD=500.0)
+            
+            if success:
+                print(f"Successfully bought SOL. New Balance: ${my_account.getBalance():.2f}")
+            else:
+                print("Trade failed, insufficient funds.")
 
-    # 3. Simulate price movement (SOL goes up to $150.00)
-    # We need a dictionary of current prices for valuation
-    market_prices = {"SOL": 150.00}
-    
-    # 4. Check Performance
-    portfolio_val = my_account.getPortfolioValue(market_prices)
-    pnl = my_account.getPnL(market_prices)
-    
-    print("\n--- Portfolio Status Update ---")
-    print(f"Total Portfolio Value: ${portfolio_val:.2f}")
-    print(f"Total PnL: ${pnl:.2f}")
-
-    # 5. Simulate Selling half the position
-    # If we have ~7.002 SOL (after slippage), let's sell 3.5
-    print("\n--- Selling Partial Position ---")
-    my_account.sellPosition(token="SOL", price=150.00, amount=3.5)
-    print(f"Final Cash Balance: ${my_account.getBalance():.2f}")
-    print(f"Remaining Positions: {my_account.getPositions()}")
+            # Update and display portfolio status
+            market_prices = {"SOL": 150.00} # Mock current market price
+            portfolio_val = my_account.getPortfolioValue(market_prices)
+            
+            print(f"Status Update - Portfolio Value: ${portfolio_val:.2f} | "
+                  f"Cash: ${my_account.getBalance():.2f}")
+            
+            # Wait for 30 seconds before the next trade
+            time.sleep(30)
+            
+    except KeyboardInterrupt:
+        print("\nPaper Trader shutting down...")
