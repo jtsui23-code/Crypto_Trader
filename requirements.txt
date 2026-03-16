@@ -2,4 +2,4 @@ solana
 solders
 python-dotenv
 psycopg2-binary
-sklearn
+scikit-learn
