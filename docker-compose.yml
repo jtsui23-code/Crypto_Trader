@@ -1,15 +1,4 @@
 services:
-  # Backend
-  backend:
-    build: 
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - .:/app
-    environment:
-      - PYTHONPATH=/app/trader
-    command: python -m engine.listener
-
   # Frontend
   frontend:
     build:
@@ -19,6 +8,40 @@ services:
       - "5173:5173"
     volumes:
       - ./trader/frontend:/app
-      - /app/node_modules
+      - /app/node_modules 
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    stdin_open: true
+    tty: true
+    
+  # Listener
+  listener:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONPATH=/app/trader
+    command: python -m engine.listener
+    depends_on:
+      frontend:
+        condition: service_started
+    healthcheck:
+      # This checks if the process is actually running inside the container
+      test: ["CMD-SHELL", "pgrep -f engine.listener || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Paper trader
+  paper_trader:
+    build: .
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONPATH=/app/trader
+    command: python -m engine.paper_trader
+    depends_on:
+      listener:
+        condition: service_healthy
     stdin_open: true
     tty: true
