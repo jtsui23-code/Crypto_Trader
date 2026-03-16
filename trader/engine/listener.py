@@ -4,6 +4,7 @@ from pathlib import Path
 from solana.rpc.websocket_api import connect
 from solders.rpc.config import RpcTransactionLogsFilterMentions
 from solders.pubkey import Pubkey
+from trader.engine.decoder import Decoder
 
 
 """
@@ -43,6 +44,7 @@ class WhaleListener:
     def __init__(self, rpc_url="wss://api.mainnet-beta.solana.com"):
         self.rpc_url = rpc_url
         self.targets = self._load_targets()
+        self.decoder = Decoder()
 
 
     """
@@ -174,7 +176,7 @@ class WhaleListener:
             signature = msg[0].params.result.value.signature
             print(f"Activity Detected! Signature: {signature}")
 
-            # TODO: Integrate with decoder.py in Week 4
+            await asyncio.to_thread(self.decoder.decode_swap, signature)
 
         except Exception as e:
             print(f"Error processing activity: {e}")
