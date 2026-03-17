@@ -28,8 +28,8 @@ services:
     healthcheck:
       # This checks if the process is actually running inside the container
       test: ["CMD-SHELL", "pgrep -f engine.listener || exit 1"]
-      interval: 10s
-      timeout: 5s
+      interval: 2s
+      timeout: 2s
       retries: 5
 
   # Paper trader
