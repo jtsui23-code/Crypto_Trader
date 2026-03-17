@@ -211,7 +211,7 @@ class PaperAccount:
             - Market value of all open positions
     """
     def getPortfolioValue(self, currentPrices: Dict[str, float]) -> float:
-        total_value = self.balance
+        total_value = 0
 
         for token, amount in self.positions.items():
             price = currentPrices.get(token, 0)
@@ -276,33 +276,48 @@ class PaperAccount:
         return self.positions
     
 
+mock_prices = {
+    "SOL": 150.00,
+    "BONK": 0.02,
+    "JUP": 1.10,
+    "Dogwithhat": 2.30,
+    "Render": 6.15,
+    "Popcat": 0.98
+}
+
 if __name__ == "__main__":
+    import random
+
     # Initialize the account with $10,000
     my_account = PaperAccount(initialBalance=10000.0)
     print(f"Account Initialized. Balance: ${my_account.getBalance():.2f}")
+    test_buy_amount = 100.0
 
     try:
         while True:
             # Execute a simulated trade automatically
             print(f"\n[{datetime.now().strftime('%H:%M:%S')}] --- Trade Triggered ---")
             
-            # Mocking a trade: Buying $500 worth of SOL at a mock price of $145.00
-            success = my_account.executeCopy(token="SOL", price=145.00, amountUSD=500.0)
+            token, price = random.choice(list(mock_prices.items()))
+            
+
+            # Mocking a trade: Buying $500 worth of token at a mock price
+            success = my_account.executeCopy(token=token, price=price, amountUSD=test_buy_amount)
             
             if success:
-                print(f"Successfully bought SOL. New Balance: ${my_account.getBalance():.2f}")
+                print(f"Successfully bought ${test_buy_amount} of {token} at ${price} per token with 2% slippage. New Balance: ${my_account.getBalance():.2f}")
             else:
                 print("Trade failed, insufficient funds.")
 
             # Update and display portfolio status
             market_prices = {"SOL": 150.00} # Mock current market price
-            portfolio_val = my_account.getPortfolioValue(market_prices)
+            portfolio_val = my_account.getPortfolioValue(mock_prices)
             
             print(f"Status Update - Portfolio Value: ${portfolio_val:.2f} | "
                   f"Cash: ${my_account.getBalance():.2f}")
             
             # Wait for 30 seconds before the next trade
-            time.sleep(30)
+            time.sleep(10)
             
     except KeyboardInterrupt:
         print("\nPaper Trader shutting down...")
