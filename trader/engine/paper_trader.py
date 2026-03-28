@@ -1,11 +1,46 @@
 import os
+import json
 import time
+import requests
 import psycopg2
+from pathlib import Path
 from dotenv import load_dotenv
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 load_dotenv()
+
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+
+# How often the engine polls the swaps table for new whale trades (seconds)
+POLL_INTERVAL_SECONDS = 5
+
+# Fraction of current balance to risk on each copied trade (e.g. 0.05 = 5%)
+RISK_PER_TRADE = 0.05
+
+# --- Trailing Stop ---
+# How far the price can drop from the position's peak before selling (e.g. 0.20 = 20%)
+TRAILING_STOP_PCT = 0.20
+
+# --- Time-Based Exit ---
+# Maximum time to hold a position before force-selling (seconds)
+MAX_HOLD_SECONDS = 1800  # 30 minutes
+
+# ---------------------------------------------------------------------------
+# Other sell thresholds available for future experimentation (not yet active)
+# ---------------------------------------------------------------------------
+# TAKE_PROFIT_PCT       = 0.50   # Sell 100% when up X% from entry
+# PARTIAL_TAKE_PROFIT   = {      # Sell portions at multiple targets
+#     0.50: 0.50,                #   sell 50% of position at +50%
+#     2.00: 0.50,                #   sell remaining 50% at +200%
+# }
+# STOP_LOSS_PCT         = 0.15   # Hard stop — sell immediately if down X% from entry
+# MAX_ALLOCATION_PCT    = 0.30   # Trim position if it grows beyond X% of portfolio
+# VOLUME_DROP_EXIT      = True   # Sell if 5-min volume drops sharply (needs price API extension)
+# WHALE_EXIT_MIRROR     = True   # Sell when the whale sells the same token (full copy)
 
 
 """
@@ -66,22 +101,45 @@ Class Name:
     PaperAccount
 
 Description:
-    Simulates a paper trading account for copy trading strategies.
-    Tracks balance, open positions, and trade history while applying
-    simplified slippage assumptions. Pulls real swap data from a
-    PostgreSQL database configured via DATABASE_URL in .env.
+    Simulates a paper trading account that mirrors whale swaps detected
+    by an external blockchain listener and stored in a PostgreSQL database.
+
+    Buy side:
+        Polls the swaps table periodically for new whale trades and
+        mirrors them using a configurable risk-per-trade position size.
+
+    Sell side:
+        Autonomously manages open positions using a trailing stop and
+        a time-based exit, evaluated against real-time Jupiter prices.
+
+    Persistence:
+        Saves and loads account state, open positions, trade history,
+        and per-wallet performance metrics to/from PostgreSQL so progress
+        survives restarts.
 
 Member Variables:
     balance (float):
         Current available USD balance.
-    positions (Dict[str, float]):
-        Mapping of token symbol to amount currently held.
+    positions (Dict[str, dict]):
+        Open positions keyed by token_out_mint. Each entry holds:
+            token_out_mint  - mint address of the held token
+            token_symbol    - human readable label
+            amount          - quantity of tokens held
+            entry_price     - average price paid per token (after slippage)
+            peak_price      - highest price seen since entry
+            entry_time      - datetime the position was opened
+            cost_basis      - total USD spent on the position
+            wallet_address  - whale wallet that triggered the buy
     tradeHistory (List[Trade]):
-        List of all executed trades.
+        In-memory list of all trades executed this session.
     initialBalance (float):
-        Starting account balance used for PnL calculation.
+        Starting account balance used for total PnL calculation.
+    targets (list):
+        Whale wallet addresses loaded from data/whales.json.
     _db_conn:
-        Active psycopg2 database connection, or None if not connected.
+        Active psycopg2 database connection, or None if unavailable.
+    _last_seen_swap_id (int):
+        Highest swap ID already processed to avoid reprocessing.
 """
 class PaperAccount:
 
@@ -92,23 +150,81 @@ class PaperAccount:
     Parameters:
         initialBalance (float):
             Starting account balance. Defaults to 10000.0 USD.
+            Only used if no saved state exists in the database.
 
     Return:
         None
 
     Method Description:
-        Initializes the paper trading account with a starting
-        balance, empty positions dictionary, empty trade history,
-        and opens a connection to the PostgreSQL database using
-        DATABASE_URL from the environment.
+        Connects to the database, loads whale targets, restores any
+        previously saved account state and open positions, and sets
+        the baseline swap ID so only new swaps are processed.
     """
     def __init__(self, initialBalance: float = 10000.0):
-        self.balance = initialBalance
         self.initialBalance = initialBalance
-        self.positions: Dict[str, float] = {}
+        self.balance = initialBalance
+        self.positions: Dict[str, dict] = {}
         self.tradeHistory: List[Trade] = []
-        self._db_conn = self._connect_db()
+        self.targets: list = []
 
+        self._db_conn = self._connect_db()
+        self.targets = self._load_targets()
+        self._ensure_trader_performance_rows()
+        self._load_state()
+        self._last_seen_swap_id = self._get_max_swap_id()
+
+
+    # -----------------------------------------------------------------------
+    # Whale target loading
+    # -----------------------------------------------------------------------
+
+    """
+    Method Name:
+        _load_targets
+
+    Parameters:
+        None
+
+    Return:
+        list:
+            A list of whale wallet address strings.
+            Returns an empty list if the file does not exist or is invalid.
+
+    Method Description:
+        Loads whale wallet addresses from data/whales.json.
+        Handles both a direct list and a dict with a "wallets" key.
+        Gracefully handles missing files and malformed JSON.
+    """
+    def _load_targets(self) -> list:
+        base_path = Path(__file__).parent.parent
+        file_path = base_path / "data" / "whales.json"
+
+        try:
+            if file_path.exists():
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+
+                    if isinstance(data, dict) and "wallets" in data:
+                        data = data["wallets"]
+
+                    if not isinstance(data, list):
+                        print(f"Error: Expected list in {file_path.name}, got {type(data)}")
+                        return []
+
+                    print(f"Loaded {len(data)} whale targets.")
+                    return data
+            else:
+                print(f"Warning: {file_path} not found.")
+                return []
+
+        except Exception as e:
+            print(f"Error reading whales.json: {e}")
+            return []
+
+
+    # -----------------------------------------------------------------------
+    # Database connection
+    # -----------------------------------------------------------------------
 
     """
     Method Name:
@@ -121,10 +237,8 @@ class PaperAccount:
         psycopg2 connection object, or None on failure.
 
     Method Description:
-        Reads DATABASE_URL from the environment (populated by
-        python-dotenv via the .env file) and opens a psycopg2
-        connection. Returns None and prints a warning if the
-        variable is missing or the connection fails.
+        Reads DATABASE_URL from the environment and opens a persistent
+        psycopg2 connection. Returns None and warns if unavailable.
     """
     def _connect_db(self):
         database_url = os.getenv("DATABASE_URL")
@@ -141,239 +255,799 @@ class PaperAccount:
             return None
 
 
+    # -----------------------------------------------------------------------
+    # State persistence — save and load
+    # -----------------------------------------------------------------------
+
     """
     Method Name:
-        _fetch_latest_swap
+        _load_state
 
     Parameters:
-        token_mint (str):
-            The token_out_mint address to filter swaps by.
-            Pass None to fetch the single most-recent swap
-            across all tokens.
+        None
 
     Return:
-        Optional[dict]:
-            A dict with keys id, amount_in, price_per_token,
-            timestamp, amount_out, owner, token_out_mint,
-            token_in_mint — or None if no row exists or the
-            database is unavailable.
+        None
 
     Method Description:
-        Queries the swaps table for the latest record matching
-        the given token_out_mint (or any token if None), ordered
-        by timestamp descending, and returns the row as a plain dict.
-
-        Columns read: id, amount_in, price_per_token, timestamp,
-                      amount_out, owner, token_out_mint, token_in_mint
+        Restores account balance and open positions from the database
+        on startup. If no saved state exists the engine starts fresh
+        with initialBalance. Allows the engine to resume seamlessly
+        after a restart without losing progress.
     """
-    def _fetch_latest_swap(self, token_mint: Optional[str] = None) -> Optional[dict]:
+    def _load_state(self):
         if self._db_conn is None:
-            print("No database connection — skipping DB fetch.")
-            return None
+            return
 
         try:
             cursor = self._db_conn.cursor()
 
-            if token_mint:
-                query = """
-                    SELECT id, amount_in, price_per_token, timestamp,
-                           amount_out, owner, token_out_mint, token_in_mint
-                    FROM swaps
-                    WHERE token_out_mint = %s
-                    ORDER BY timestamp DESC
-                    LIMIT 1
-                """
-                cursor.execute(query, (token_mint,))
-            else:
-                query = """
-                    SELECT id, amount_in, price_per_token, timestamp,
-                           amount_out, owner, token_out_mint, token_in_mint
-                    FROM swaps
-                    ORDER BY timestamp DESC
-                    LIMIT 1
-                """
-                cursor.execute(query)
-
+            # Restore account balance
+            cursor.execute("SELECT balance, initial_balance FROM paper_account LIMIT 1")
             row = cursor.fetchone()
+            if row:
+                self.balance = float(row[0])
+                self.initialBalance = float(row[1])
+                print(f"Restored account — Balance: ${self.balance:.2f}")
+            else:
+                print("No saved account state found, starting fresh.")
+
+            # Restore open positions
+            cursor.execute(
+                """
+                SELECT token_out_mint, token_symbol, amount, entry_price,
+                       peak_price, entry_time, cost_basis, wallet_address
+                FROM paper_positions
+                """
+            )
+            rows = cursor.fetchall()
+            for row in rows:
+                entry_time = row[5]
+                if entry_time.tzinfo is None:
+                    entry_time = entry_time.replace(tzinfo=timezone.utc)
+
+                self.positions[row[0]] = {
+                    "token_out_mint": row[0],
+                    "token_symbol":   row[1],
+                    "amount":         float(row[2]),
+                    "entry_price":    float(row[3]),
+                    "peak_price":     float(row[4]),
+                    "entry_time":     entry_time,
+                    "cost_basis":     float(row[6]),
+                    "wallet_address": row[7],
+                }
+
+            if rows:
+                print(f"Restored {len(rows)} open position(s).")
+
             cursor.close()
 
-            if row is None:
-                return None
+        except Exception as e:
+            print(f"Error loading state: {e}")
 
-            return {
-                "id":              row[0],
-                "amount_in":       float(row[1]),
-                "price_per_token": float(row[2]),
-                "timestamp":       row[3],
-                "amount_out":      float(row[4]),
-                "owner":           row[5],
-                "token_out_mint":  row[6],
-                "token_in_mint":   row[7],
-            }
+
+    """
+    Method Name:
+        _save_account
+
+    Parameters:
+        None
+
+    Return:
+        None
+
+    Method Description:
+        Upserts the current balance and initial_balance into the
+        paper_account table. Always maintains a single row.
+    """
+    def _save_account(self):
+        if self._db_conn is None:
+            return
+        try:
+            cursor = self._db_conn.cursor()
+            cursor.execute(
+                """
+                UPDATE paper_account
+                SET balance = %s, initial_balance = %s, last_updated = NOW()
+                """,
+                (self.balance, self.initialBalance)
+            )
+            cursor.close()
+        except Exception as e:
+            print(f"Error saving account: {e}")
+
+
+    """
+    Method Name:
+        _save_position
+
+    Parameters:
+        token_out_mint (str):
+            Mint address of the position to save or update.
+
+    Return:
+        None
+
+    Method Description:
+        Upserts a single open position into paper_positions.
+        Uses INSERT ... ON CONFLICT to handle both new positions
+        and updates to existing ones (e.g. after averaging in).
+    """
+    def _save_position(self, token_out_mint: str):
+        if self._db_conn is None or token_out_mint not in self.positions:
+            return
+        try:
+            pos = self.positions[token_out_mint]
+            cursor = self._db_conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO paper_positions
+                    (token_out_mint, token_symbol, amount, entry_price,
+                     peak_price, entry_time, cost_basis, wallet_address, last_updated)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ON CONFLICT (token_out_mint) DO UPDATE SET
+                    token_symbol  = EXCLUDED.token_symbol,
+                    amount        = EXCLUDED.amount,
+                    entry_price   = EXCLUDED.entry_price,
+                    peak_price    = EXCLUDED.peak_price,
+                    entry_time    = EXCLUDED.entry_time,
+                    cost_basis    = EXCLUDED.cost_basis,
+                    wallet_address = EXCLUDED.wallet_address,
+                    last_updated  = NOW()
+                """,
+                (
+                    pos["token_out_mint"],
+                    pos["token_symbol"],
+                    pos["amount"],
+                    pos["entry_price"],
+                    pos["peak_price"],
+                    pos["entry_time"],
+                    pos["cost_basis"],
+                    pos["wallet_address"],
+                )
+            )
+            cursor.close()
+        except Exception as e:
+            print(f"Error saving position {token_out_mint}: {e}")
+
+
+    """
+    Method Name:
+        _delete_position
+
+    Parameters:
+        token_out_mint (str):
+            Mint address of the position to remove.
+
+    Return:
+        None
+
+    Method Description:
+        Deletes a closed position from paper_positions after a sell.
+    """
+    def _delete_position(self, token_out_mint: str):
+        if self._db_conn is None:
+            return
+        try:
+            cursor = self._db_conn.cursor()
+            cursor.execute(
+                "DELETE FROM paper_positions WHERE token_out_mint = %s",
+                (token_out_mint,)
+            )
+            cursor.close()
+        except Exception as e:
+            print(f"Error deleting position {token_out_mint}: {e}")
+
+
+    """
+    Method Name:
+        _log_trade
+
+    Parameters:
+        wallet_address (str):
+            Whale wallet that triggered the trade (empty string for sells).
+        token_out_mint (str):
+            Mint address of the traded token.
+        token_symbol (str):
+            Human readable token label.
+        side (str):
+            'BUY' or 'SELL'.
+        price (float):
+            Executed price per token after slippage.
+        amount (float):
+            Quantity of tokens traded.
+        usd_value (float):
+            Total USD value of the trade.
+        sell_reason (str, optional):
+            Reason the sell was triggered. None for buys.
+        realised_pnl (float, optional):
+            Realised profit or loss. None for buys.
+
+    Return:
+        None
+
+    Method Description:
+        Inserts a single trade record into paper_trades for
+        permanent historical logging.
+    """
+    def _log_trade(
+        self,
+        wallet_address: str,
+        token_out_mint: str,
+        token_symbol: str,
+        side: str,
+        price: float,
+        amount: float,
+        usd_value: float,
+        sell_reason: Optional[str] = None,
+        realised_pnl: Optional[float] = None,
+    ):
+        if self._db_conn is None:
+            return
+        try:
+            cursor = self._db_conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO paper_trades
+                    (wallet_address, token_out_mint, token_symbol, side,
+                     price, amount, usd_value, sell_reason, realised_pnl, timestamp)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """,
+                (wallet_address, token_out_mint, token_symbol, side,
+                 price, amount, usd_value, sell_reason, realised_pnl)
+            )
+            cursor.close()
+        except Exception as e:
+            print(f"Error logging trade: {e}")
+
+
+    # -----------------------------------------------------------------------
+    # Trader performance tracking
+    # -----------------------------------------------------------------------
+
+    """
+    Method Name:
+        _ensure_trader_performance_rows
+
+    Parameters:
+        None
+
+    Return:
+        None
+
+    Method Description:
+        Inserts a default performance row for each whale wallet loaded
+        from whales.json if one does not already exist. Uses
+        INSERT ... ON CONFLICT DO NOTHING so existing rows are safe.
+    """
+    def _ensure_trader_performance_rows(self):
+        if self._db_conn is None or not self.targets:
+            return
+        try:
+            cursor = self._db_conn.cursor()
+            for wallet in self.targets:
+                cursor.execute(
+                    """
+                    INSERT INTO paper_trader_performance (wallet_address)
+                    VALUES (%s)
+                    ON CONFLICT (wallet_address) DO NOTHING
+                    """,
+                    (wallet,)
+                )
+            cursor.close()
+            print(f"Performance rows ensured for {len(self.targets)} wallet(s).")
+        except Exception as e:
+            print(f"Error ensuring performance rows: {e}")
+
+
+    """
+    Method Name:
+        _update_trader_performance
+
+    Parameters:
+        wallet_address (str):
+            The whale wallet whose stats should be updated.
+        realised_pnl (float):
+            The PnL from the trade that just closed.
+
+    Return:
+        None
+
+    Method Description:
+        Updates the paper_trader_performance row for a wallet after
+        a position closes. Increments trade counts, accumulates PnL,
+        recalculates the average, and updates best/worst trade records.
+    """
+    def _update_trader_performance(self, wallet_address: str, realised_pnl: float):
+        if self._db_conn is None or not wallet_address:
+            return
+        try:
+            cursor = self._db_conn.cursor()
+            cursor.execute(
+                """
+                UPDATE paper_trader_performance SET
+                    total_trades_copied = total_trades_copied + 1,
+                    winning_trades      = winning_trades + CASE WHEN %s > 0 THEN 1 ELSE 0 END,
+                    losing_trades       = losing_trades  + CASE WHEN %s < 0 THEN 1 ELSE 0 END,
+                    total_realised_pnl  = total_realised_pnl + %s,
+                    avg_pnl_per_trade   = (total_realised_pnl + %s) / (total_trades_copied + 1),
+                    best_trade_pnl      = GREATEST(best_trade_pnl, %s),
+                    worst_trade_pnl     = LEAST(worst_trade_pnl, %s),
+                    last_trade_time     = NOW(),
+                    last_updated        = NOW()
+                WHERE wallet_address = %s
+                """,
+                (realised_pnl, realised_pnl, realised_pnl, realised_pnl,
+                 realised_pnl, realised_pnl, wallet_address)
+            )
+            cursor.close()
+        except Exception as e:
+            print(f"Error updating trader performance for {wallet_address}: {e}")
+
+
+    # -----------------------------------------------------------------------
+    # Database swap polling
+    # -----------------------------------------------------------------------
+
+    """
+    Method Name:
+        _get_max_swap_id
+
+    Parameters:
+        None
+
+    Return:
+        int:
+            The highest swap ID currently in the table, or 0 if empty.
+
+    Method Description:
+        Called once at startup to establish a baseline so the engine
+        ignores swaps inserted before it started running.
+    """
+    def _get_max_swap_id(self) -> int:
+        if self._db_conn is None:
+            return 0
+        try:
+            cursor = self._db_conn.cursor()
+            cursor.execute("SELECT COALESCE(MAX(id), 0) FROM swaps")
+            max_id = cursor.fetchone()[0]
+            cursor.close()
+            print(f"Baseline swap ID set to {max_id} — watching for new swaps above this.")
+            return max_id
+        except Exception as e:
+            print(f"Could not fetch max swap ID: {e}")
+            return 0
+
+
+    """
+    Method Name:
+        _fetch_new_swaps
+
+    Parameters:
+        None
+
+    Return:
+        List[dict]:
+            New swap rows as dicts ordered oldest-first.
+            Only includes swaps from tracked whale wallets.
+
+    Method Description:
+        Queries the swaps table for rows with id > _last_seen_swap_id
+        whose owner is in the loaded whale targets list. Returns them
+        oldest-first so trades are processed in chronological order.
+    """
+    def _fetch_new_swaps(self) -> List[dict]:
+        if self._db_conn is None or not self.targets:
+            return []
+        try:
+            cursor = self._db_conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, amount_in, price_per_token, timestamp,
+                       amount_out, owner, token_out_mint, token_in_mint
+                FROM swaps
+                WHERE id > %s
+                  AND owner = ANY(%s)
+                ORDER BY id ASC
+                """,
+                (self._last_seen_swap_id, self.targets)
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+            swaps = []
+            for row in rows:
+                swaps.append({
+                    "id":              row[0],
+                    "amount_in":       float(row[1]),
+                    "price_per_token": float(row[2]),
+                    "timestamp":       row[3],
+                    "amount_out":      float(row[4]),
+                    "owner":           row[5],
+                    "token_out_mint":  row[6],
+                    "token_in_mint":   row[7],
+                })
+            return swaps
 
         except Exception as e:
-            print(f"Database query error: {e}")
+            print(f"Database poll error: {e}")
+            return []
+
+
+    # -----------------------------------------------------------------------
+    # Price feed
+    # -----------------------------------------------------------------------
+
+    """
+    Method Name:
+        _get_price
+
+    Parameters:
+        token_mint (str):
+            The on-chain mint address of the token to price.
+
+    Return:
+        Optional[float]:
+            Current USD price from Jupiter, or None on failure.
+
+    Method Description:
+        Calls the Jupiter Price API v4 with the token's mint address
+        and returns the current USD price. Used for both PnL tracking
+        and sell threshold evaluation.
+    """
+    def _get_price(self, token_mint: str) -> Optional[float]:
+        try:
+            url = f"https://price.jup.ag/v4/price?ids={token_mint}"
+            response = requests.get(url, timeout=5)
+            data = response.json()
+            price = data.get("data", {}).get(token_mint, {}).get("price")
+            return float(price) if price is not None else None
+        except Exception as e:
+            print(f"Price fetch error for {token_mint}: {e}")
             return None
 
+
+    # -----------------------------------------------------------------------
+    # Buy side
+    # -----------------------------------------------------------------------
 
     """
     Method Name:
         executeCopy
 
     Parameters:
-        token (str):
-            Human-readable asset symbol (e.g. 'SOL', 'BONK').
-            Used for position tracking and display only.
-        price (float):
-            Fallback market price used when no DB record is found.
-        amountUSD (float):
-            Fallback USD amount used when no DB record is found.
-        token_mint (str, optional):
-            The token_out_mint address to look up in the swaps table.
-            When provided the method fetches real price_per_token and
-            amount_in from PostgreSQL instead of using the arguments above.
+        swap (dict):
+            A swap row dict from _fetch_new_swaps containing all 8 columns.
 
     Return:
         bool:
-            True if trade executed successfully.
-            False if insufficient funds.
+            True if the copy trade executed successfully.
+            False if insufficient balance or price unavailable.
 
     Method Description:
-        Simulates a copy-trade execution backed by live swap data.
+        Mirrors a whale swap detected in the database.
 
-        1. If token_mint is supplied (and a DB connection exists):
-               - Fetches the latest swap row for that mint from the
-                 swaps table.
-               - Uses price_per_token and amount_in from the row.
-               - Logs the originating owner wallet and swap ID.
-        2. Falls back to the supplied price / amountUSD arguments when
-           no DB record is available.
-        3. Verifies sufficient account balance.
-        4. Applies 2% slippage on the effective buy price.
-        5. Updates balance, positions, and trade history.
+        Position sizing:
+            Uses RISK_PER_TRADE * current balance as the USD amount
+            to allocate, independent of the whale's actual spend.
+
+        Price:
+            Fetches the real-time Jupiter price for the token.
+            Falls back to the database price_per_token if Jupiter
+            is unavailable.
+
+        Persistence:
+            Saves the updated account balance and new/updated position
+            to the database. Logs the trade to paper_trades.
     """
-    def executeCopy(
-        self,
-        token: str,
-        price: float,
-        amountUSD: float,
-        token_mint: Optional[str] = None,
-    ) -> bool:
+    def executeCopy(self, swap: dict) -> bool:
+        token_mint = swap["token_out_mint"]
+        token_symbol = token_mint
+        wallet_address = swap["owner"]
 
-        effective_price = price
-        effective_amount_usd = amountUSD
+        amount_usd = self.balance * RISK_PER_TRADE
 
-        # Pull swap data from the database when a mint address is supplied
-        if token_mint:
-            swap = self._fetch_latest_swap(token_mint)
-
-            if swap:
-                effective_price = swap["price_per_token"]
-                effective_amount_usd = swap["amount_in"]
-
-                print(
-                    f"  [DB] Swap ID={swap['id']} | "
-                    f"Owner={swap['owner']} | "
-                    f"Token out={swap['token_out_mint']} | "
-                    f"Token in={swap['token_in_mint']} | "
-                    f"Amount in=${swap['amount_in']:.4f} | "
-                    f"Price per token=${swap['price_per_token']:.6f} | "
-                    f"Amount out={swap['amount_out']:.4f} | "
-                    f"Timestamp={swap['timestamp']}"
-                )
-            else:
-                print(f"  [DB] No swap found for mint {token_mint} — using fallback values.")
-
-        if effective_amount_usd > self.balance:
-            print(f"Insufficient funds to copy trade {token}")
+        if amount_usd > self.balance:
+            print(f"Insufficient balance to copy swap for {token_mint}")
             return False
 
-        # Apply 2% slippage for buy orders
-        slipped_price = effective_price * 1.02
+        price = self._get_price(token_mint)
+        if price is None:
+            print(f"  Jupiter price unavailable for {token_mint}, using DB price.")
+            price = swap["price_per_token"]
 
-        tokens_bought = effective_amount_usd / slipped_price
-        self.balance -= effective_amount_usd
-        self.positions[token] = self.positions.get(token, 0) + tokens_bought
+        slipped_price = price * 1.02
+        tokens_bought = amount_usd / slipped_price
+        self.balance -= amount_usd
+        now = datetime.now(timezone.utc)
+
+        if token_mint in self.positions:
+            existing = self.positions[token_mint]
+            total_tokens = existing["amount"] + tokens_bought
+            avg_price = (
+                (existing["entry_price"] * existing["amount"]) +
+                (slipped_price * tokens_bought)
+            ) / total_tokens
+            existing["amount"]      = total_tokens
+            existing["entry_price"] = avg_price
+            existing["peak_price"]  = max(existing["peak_price"], slipped_price)
+            existing["cost_basis"] += amount_usd
+        else:
+            self.positions[token_mint] = {
+                "token_out_mint": token_mint,
+                "token_symbol":   token_symbol,
+                "amount":         tokens_bought,
+                "entry_price":    slipped_price,
+                "peak_price":     slipped_price,
+                "entry_time":     now,
+                "cost_basis":     amount_usd,
+                "wallet_address": wallet_address,
+            }
 
         self.tradeHistory.append(
-            Trade(token, 'BUY', slipped_price, tokens_bought, datetime.now())
+            Trade(token_symbol, 'BUY', slipped_price, tokens_bought, now)
         )
 
+        # Persist
+        self._save_account()
+        self._save_position(token_mint)
+        self._log_trade(
+            wallet_address=wallet_address,
+            token_out_mint=token_mint,
+            token_symbol=token_symbol,
+            side='BUY',
+            price=slipped_price,
+            amount=tokens_bought,
+            usd_value=amount_usd,
+        )
+
+        print(
+            f"  [BUY] {token_symbol} | "
+            f"Whale: {wallet_address[:8]}... | "
+            f"Spent ${amount_usd:.2f} | "
+            f"Price ${slipped_price:.6f} | "
+            f"Tokens {tokens_bought:.4f} | "
+            f"Balance ${self.balance:.2f}"
+        )
         return True
+
+
+    # -----------------------------------------------------------------------
+    # Sell side
+    # -----------------------------------------------------------------------
+
+    """
+    Method Name:
+        evaluateSells
+
+    Parameters:
+        None
+
+    Return:
+        None
+
+    Method Description:
+        Iterates over all open positions and checks two sell conditions
+        against the current real-time Jupiter price:
+
+        1. Trailing Stop:
+               If the current price has dropped more than TRAILING_STOP_PCT
+               below the position's peak price, sell immediately.
+               The peak price is updated and persisted if price has risen.
+
+        2. Time-Based Exit:
+               If the position has been held longer than MAX_HOLD_SECONDS,
+               sell regardless of price action.
+    """
+    def evaluateSells(self):
+        now = datetime.now(timezone.utc)
+        mints_to_sell = []
+
+        for token_mint, pos in list(self.positions.items()):
+            current_price = self._get_price(token_mint)
+
+            if current_price is None:
+                print(f"  [SELL CHECK] Could not fetch price for {token_mint}, skipping.")
+                continue
+
+            # Update and persist peak price if price has risen
+            if current_price > pos["peak_price"]:
+                pos["peak_price"] = current_price
+                self._save_position(token_mint)
+
+            # --- Trailing Stop ---
+            trailing_stop_price = pos["peak_price"] * (1 - TRAILING_STOP_PCT)
+            if current_price <= trailing_stop_price:
+                print(
+                    f"  [TRAILING STOP] {pos['token_symbol']} | "
+                    f"Peak ${pos['peak_price']:.6f} | "
+                    f"Current ${current_price:.6f} | "
+                    f"Stop ${trailing_stop_price:.6f}"
+                )
+                mints_to_sell.append((token_mint, current_price, "TRAILING_STOP"))
+                continue
+
+            # --- Time-Based Exit ---
+            entry_time = pos["entry_time"]
+            if entry_time.tzinfo is None:
+                entry_time = entry_time.replace(tzinfo=timezone.utc)
+            held_seconds = (now - entry_time).total_seconds()
+
+            if held_seconds >= MAX_HOLD_SECONDS:
+                print(
+                    f"  [TIME EXIT] {pos['token_symbol']} | "
+                    f"Held {held_seconds / 60:.1f} min | "
+                    f"Current ${current_price:.6f}"
+                )
+                mints_to_sell.append((token_mint, current_price, "TIME_EXIT"))
+
+        for token_mint, price, reason in mints_to_sell:
+            self._sellPosition(token_mint, price, reason)
 
 
     """
     Method Name:
-        sellPosition
+        _sellPosition
 
     Parameters:
-        token (str):
-            Asset symbol being sold.
+        token_mint (str):
+            Mint address of the token to sell.
         price (float):
-            Current market price.
-        amount (float):
-            Quantity of tokens to sell.
+            Current market price to sell at.
+        reason (str):
+            Label for why the sell was triggered.
 
     Return:
-        bool:
-            True if sale executed successfully.
-            False if insufficient position size.
+        None
 
     Method Description:
-        Simulates selling a held position.
+        Executes a full exit of an open position.
 
-        - Verifies sufficient token holdings.
-        - Applies assumed slippage (2% worse price for sells).
-        - Updates account balance and reduces position.
-        - Removes token entry if position reaches zero.
-        - Records trade in trade history.
+        - Applies 2% sell slippage.
+        - Credits proceeds to balance.
+        - Removes position from memory and database.
+        - Logs the trade to paper_trades.
+        - Updates the originating whale wallet's performance stats.
+        - Persists the updated account balance.
     """
-    def sellPosition(self, token: str, price: float, amount: float) -> bool:
-        if token not in self.positions or self.positions[token] < amount:
-            return False
+    def _sellPosition(self, token_mint: str, price: float, reason: str):
+        if token_mint not in self.positions:
+            return
 
-        # Apply 2% slippage for sell orders
-        effective_price = price * 0.98
+        pos = self.positions[token_mint]
+        amount = pos["amount"]
+        token_symbol = pos["token_symbol"]
+        wallet_address = pos["wallet_address"]
 
-        gain_usd = amount * effective_price
-        self.balance += gain_usd
-        self.positions[token] -= amount
+        slipped_price = price * 0.98
+        proceeds = amount * slipped_price
+        realised_pnl = proceeds - pos["cost_basis"]
 
-        if self.positions[token] <= 0:
-            del self.positions[token]
+        self.balance += proceeds
+        del self.positions[token_mint]
+        now = datetime.now(timezone.utc)
 
         self.tradeHistory.append(
-            Trade(token, 'SELL', effective_price, amount, datetime.now())
+            Trade(token_symbol, 'SELL', slipped_price, amount, now)
         )
 
-        return True
+        # Persist
+        self._delete_position(token_mint)
+        self._save_account()
+        self._log_trade(
+            wallet_address=wallet_address,
+            token_out_mint=token_mint,
+            token_symbol=token_symbol,
+            side='SELL',
+            price=slipped_price,
+            amount=amount,
+            usd_value=proceeds,
+            sell_reason=reason,
+            realised_pnl=realised_pnl,
+        )
+        self._update_trader_performance(wallet_address, realised_pnl)
 
+        print(
+            f"  [SELL] {token_symbol} | "
+            f"Reason: {reason} | "
+            f"Price ${slipped_price:.6f} | "
+            f"Proceeds ${proceeds:.2f} | "
+            f"Realised PnL ${realised_pnl:+.2f} | "
+            f"Balance ${self.balance:.2f}"
+        )
+
+
+    # -----------------------------------------------------------------------
+    # Main poll loop
+    # -----------------------------------------------------------------------
+
+    """
+    Method Name:
+        run
+
+    Parameters:
+        None
+
+    Return:
+        None
+
+    Method Description:
+        The main engine loop. On each iteration:
+
+        1. Fetches new swap rows for tracked whale wallets (buy side).
+        2. Calls executeCopy for each new swap.
+        3. Updates _last_seen_swap_id to avoid reprocessing.
+        4. Calls evaluateSells to check all open positions (sell side).
+        5. Prints a portfolio snapshot.
+        6. Sleeps for POLL_INTERVAL_SECONDS before repeating.
+    """
+    def run(self):
+        print(f"\nPaper Trading Engine started. Polling every {POLL_INTERVAL_SECONDS}s.\n")
+        try:
+            while True:
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] --- Poll ---")
+
+                # Buy side — check for new whale swaps
+                new_swaps = self._fetch_new_swaps()
+                if new_swaps:
+                    for swap in new_swaps:
+                        print(
+                            f"  [NEW SWAP] ID={swap['id']} | "
+                            f"Owner={swap['owner'][:8]}... | "
+                            f"Mint={swap['token_out_mint']}"
+                        )
+                        self.executeCopy(swap)
+                    self._last_seen_swap_id = new_swaps[-1]["id"]
+                else:
+                    print("  No new swaps.")
+
+                # Sell side — evaluate open positions
+                if self.positions:
+                    self.evaluateSells()
+
+                # Portfolio snapshot
+                portfolio_val = self.getPortfolioValue()
+                pnl = self.getPnL()
+                print(
+                    f"  Portfolio: ${portfolio_val:.2f} | "
+                    f"Cash: ${self.balance:.2f} | "
+                    f"PnL: ${pnl:+.2f} | "
+                    f"Open positions: {len(self.positions)}\n"
+                )
+
+                time.sleep(POLL_INTERVAL_SECONDS)
+
+        except KeyboardInterrupt:
+            print("\nPaper Trading Engine shutting down...")
+            self.close()
+
+
+    # -----------------------------------------------------------------------
+    # Portfolio metrics
+    # -----------------------------------------------------------------------
 
     """
     Method Name:
         getPortfolioValue
 
     Parameters:
-        currentPrices (Dict[str, float]):
-            Mapping of token symbol to current market price.
+        None
 
     Return:
         float:
-            Total portfolio value (cash + open positions).
+            Total portfolio value (cash + open positions at live prices).
 
     Method Description:
-        Calculates total portfolio value by summing:
-            - Current cash balance
-            - Market value of all open positions
+        Fetches real-time Jupiter prices for all open positions and
+        sums their market value with the current cash balance.
     """
-    def getPortfolioValue(self, currentPrices: Dict[str, float]) -> float:
-        total_value = self.balance
-
-        for token, amount in self.positions.items():
-            price = currentPrices.get(token, 0)
-            total_value += amount * price
-
-        return total_value
+    def getPortfolioValue(self) -> float:
+        total = self.balance
+        for token_mint, pos in self.positions.items():
+            price = self._get_price(token_mint)
+            if price is not None:
+                total += pos["amount"] * price
+        return total
 
 
     """
@@ -381,19 +1055,17 @@ class PaperAccount:
         getPnL
 
     Parameters:
-        currentPrices (Dict[str, float]):
-            Mapping of token symbol to current market price.
+        None
 
     Return:
         float:
             Profit or loss relative to initial balance.
 
     Method Description:
-        Computes unrealized + realized PnL by subtracting
-        the initial account balance from current portfolio value.
+        Subtracts the initial balance from the current portfolio value.
     """
-    def getPnL(self, currentPrices: Dict[str, float]) -> float:
-        return self.getPortfolioValue(currentPrices) - self.initialBalance
+    def getPnL(self) -> float:
+        return self.getPortfolioValue() - self.initialBalance
 
 
     """
@@ -422,13 +1094,13 @@ class PaperAccount:
         None
 
     Return:
-        Dict[str, float]:
-            Dictionary mapping token symbols to amounts held.
+        Dict[str, dict]:
+            Dictionary of open positions keyed by token_out_mint.
 
     Method Description:
         Returns the current open positions in the account.
     """
-    def getPositions(self) -> Dict[str, float]:
+    def getPositions(self) -> Dict[str, dict]:
         return self.positions
 
 
@@ -444,7 +1116,6 @@ class PaperAccount:
 
     Method Description:
         Cleanly closes the PostgreSQL database connection.
-        Call this before the process exits.
     """
     def close(self):
         if self._db_conn:
@@ -452,70 +1123,6 @@ class PaperAccount:
             print("Database connection closed.")
 
 
-# ---------------------------------------------------------------------------
-# Mock data — used as fallback when the DB has no entry for a given token
-# ---------------------------------------------------------------------------
-mock_prices = {
-    "SOL":        150.00,
-    "BONK":       0.02,
-    "JUP":        1.10,
-    "Dogwithhat": 2.30,
-    "Render":     6.15,
-    "Popcat":     0.98,
-}
-
-# Map human-readable ticker -> on-chain mint address
-# Replace placeholder values with real Solana mint addresses
-mock_mints = {
-    "SOL":        "So11111111111111111111111111111111111111112",
-    "BONK":       "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
-    "JUP":        "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
-    "Dogwithhat": "DoGWithHatMintAddressPlaceholder1111111111111",
-    "Render":     "rndrizKT3MK1iimdxRdWabcF7Zg7AR5T4nud4EkHBof",
-    "Popcat":     "PopcatMintAddressPlaceholder111111111111111111",
-}
-
-
 if __name__ == "__main__":
-    import random
-
-    my_account = PaperAccount(initialBalance=10000.0)
-    print(f"Account Initialized. Balance: ${my_account.getBalance():.2f}\n")
-
-    test_buy_amount = 100.0  # Fallback USD amount if DB has no data
-
-    try:
-        while True:
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] --- Trade Triggered ---")
-
-            token, fallback_price = random.choice(list(mock_prices.items()))
-            token_mint = mock_mints.get(token)
-
-            success = my_account.executeCopy(
-                token=token,
-                price=fallback_price,
-                amountUSD=test_buy_amount,
-                token_mint=token_mint,
-            )
-
-            if success:
-                print(
-                    f"Bought {token} (mint={token_mint}) | "
-                    f"New Balance: ${my_account.getBalance():.2f}"
-                )
-            else:
-                print("Trade failed — insufficient funds.")
-
-            portfolio_val = my_account.getPortfolioValue(mock_prices)
-            pnl = my_account.getPnL(mock_prices)
-            print(
-                f"Portfolio: ${portfolio_val:.2f} | "
-                f"Cash: ${my_account.getBalance():.2f} | "
-                f"PnL: ${pnl:.2f}\n"
-            )
-
-            time.sleep(10)
-
-    except KeyboardInterrupt:
-        print("\nPaper Trader shutting down...")
-        my_account.close()
+    account = PaperAccount(initialBalance=10000.0)
+    account.run()
