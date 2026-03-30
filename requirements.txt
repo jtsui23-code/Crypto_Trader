@@ -3,3 +3,4 @@ solders
 python-dotenv
 psycopg2-binary
 scikit-learn
+requests

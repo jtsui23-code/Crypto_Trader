@@ -86,6 +86,44 @@ async def get_wallet_history(wallet_address: str):
         if conn: conn.close()
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/portfolio/positions")
+async def get_paper_positions():
+    """
+    Fetches all open positions from the paper_positions table.
+    """
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
+    try:
+        cur = conn.cursor()
+        # Retrieve all columns as defined in the paper_trader.py schema
+        query = """
+            SELECT token_out_mint, token_symbol, amount, entry_price, 
+                   peak_price, cost_basis, wallet_address
+            FROM paper_positions
+            ORDER BY last_updated DESC
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        return [
+            {
+                "id": r[0],             # token_out_mint
+                "symbol": r[1],         # token_symbol
+                "amount": float(r[2]),
+                "entry_price": float(r[3]),
+                "peak_price": float(r[4]),
+                "cost_basis": float(r[5]),
+                "wallet_address": r[6]
+            } for r in rows
+        ]
+    except Exception as e:
+        if conn: conn.close()
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     print("Starting API server on http://0.0.0.0:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000)
