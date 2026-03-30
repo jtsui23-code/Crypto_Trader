@@ -19,8 +19,27 @@ interface Trader {
   record: string;
 }
 
+<<<<<<< Updated upstream
 export default function App() {
   // 1. View and Selection State
+=======
+const backgroundColor = '#0a0a0a';
+
+const activeColor = '#208dd1';
+const inactiveColor = '#FFFFFF';
+
+const activeWeight = 'bold';
+const inactiveWeight = 'normal';
+
+const tabTransition = 'color 0.2s';
+
+
+export default function App() {
+  document.title = "Crypto Trader Dashboard";
+  document.body.style.backgroundColor = backgroundColor;
+
+  // Set our state for the active tab, selected coin, and selected trader
+>>>>>>> Stashed changes
   const [activeTab, setActiveTab] = useState<'portfolio' | 'traders'>('portfolio');
   const [selectedCoinId, setSelectedCoinId] = useState<string>('1');
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
@@ -47,7 +66,11 @@ export default function App() {
   const selectedTrader = traders.find((t) => t.id === selectedTraderId);
 
   return (
+<<<<<<< Updated upstream
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+=======
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: backgroundColor, color: 'white' }}>
+>>>>>>> Stashed changes
       <CssBaseline />
       
       {/* Navbar */}
