@@ -12,9 +12,9 @@ interface Coin {
   symbol: string;      // token_symbol
   amount: number;
   entry_price: number;
-  peak_price: number;  // Added to match DB
+  peak_price: number;  
   cost_basis: number;
-  wallet_address: string; // Added to match DB
+  wallet_address: string; 
 }
 
 interface Trader {
