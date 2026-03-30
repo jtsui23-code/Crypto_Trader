@@ -1,14 +1,10 @@
 trader/.env
 /.vscode
-/trader/__pycache__
-trader/.env
-/trader/engine/__pycache__
-/trader/scripts/__pycache__
 */__pycache__/
 *.py[cod]
 *$py.class
 
-.env
+*/.env
 
 .DS_Store
 Thumbs.db
