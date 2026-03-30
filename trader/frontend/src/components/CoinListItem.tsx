@@ -1,15 +1,13 @@
 import { ListItem, ListItemButton, ListItemAvatar, Avatar, ListItemText } from '@mui/material';
 
 interface CoinListItemProps {
-  name: string;
-  price: string;
   symbol: string;
+  entry_price: number;
   isSelected: boolean;
   onSelect: () => void;
 }
 
-export const CoinListItem = ({ name, price, symbol, isSelected, onSelect }: CoinListItemProps) => (
-  // We use disablePadding because the padding now lives inside the ListItemButton
+export const CoinListItem = ({ symbol, entry_price, isSelected, onSelect }: CoinListItemProps) => (
   <ListItem disablePadding sx={{ borderBottom: '1px solid #222' }}>
     <ListItemButton 
       onClick={onSelect} 
@@ -21,11 +19,14 @@ export const CoinListItem = ({ name, price, symbol, isSelected, onSelect }: Coin
       }}
     >
       <ListItemAvatar>
-        <Avatar sx={{ border: '1px solid #fff', bgcolor: 'transparent' }}>
-          {symbol[0]}
+        <Avatar sx={{ border: '1px solid #fff', bgcolor: 'transparent', fontSize: '0.8rem' }}>
+          {symbol.substring(0, 3)}
         </Avatar>
       </ListItemAvatar>
-      <ListItemText primary={name} secondary={price} />
+      <ListItemText 
+        primary={symbol.length > 15 ? `${symbol.substring(0, 6)}...` : symbol} 
+        secondary={`Entry: $${entry_price.toFixed(6)}`} 
+      />
     </ListItemButton>
   </ListItem>
 );
