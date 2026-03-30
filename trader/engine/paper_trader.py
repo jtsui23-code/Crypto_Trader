@@ -697,8 +697,14 @@ class PaperAccount:
     """
     def _get_price(self, token_mint: str) -> Optional[float]:
         try:
-            url = f"https://price.jup.ag/v4/price?ids={token_mint}"
-            response = requests.get(url, timeout=5)
+            load_dotenv()
+            url = f"https://api.jup.ag/price/v3?ids={token_mint}"
+
+            headers = {
+                "x-api-key": os.getenv("JUPITER_API_KEY", "")
+            }
+
+            response = requests.get(url, headers=headers, timeout=5)
             data = response.json()
             price = data.get("data", {}).get(token_mint, {}).get("price")
             return float(price) if price is not None else None
