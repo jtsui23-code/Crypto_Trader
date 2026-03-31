@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 # Configuration
 # ---------------------------------------------------------------------------
 
-WHALES_FILE = Path(__file__).parent / "whales.json"
+WHALES_FILE = Path(__file__).parent / "check_wallet.json"
 
 # Public Solana RPC endpoints (tried in order if one fails)
 RPC_ENDPOINTS = [
