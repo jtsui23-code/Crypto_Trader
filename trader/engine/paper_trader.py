@@ -156,9 +156,10 @@ class PaperAccount:
         None
 
     Method Description:
-        Connects to the database, loads whale targets, restores any
-        previously saved account state and open positions, and sets
-        the baseline swap ID so only new swaps are processed.
+        Loads the Jupiter API key from the environment, connects to the
+        database, loads whale targets, restores any previously saved
+        account state and open positions, and sets the baseline swap ID
+        so only new swaps are processed.
     """
     def __init__(self, initialBalance: float = 10000.0):
         self.initialBalance = initialBalance
@@ -166,6 +167,11 @@ class PaperAccount:
         self.positions: Dict[str, dict] = {}
         self.tradeHistory: List[Trade] = []
         self.targets: list = []
+
+        self._price_cache: Dict[str, Optional[float]] = {}
+        self._jupiter_api_key = os.getenv("JUPITER_API_KEY", "")
+        if not self._jupiter_api_key:
+            print("WARNING: JUPITER_API_KEY not found in environment / .env file.")
 
         self._db_conn = self._connect_db()
         self.targets = self._load_targets()
@@ -691,26 +697,90 @@ class PaperAccount:
             Current USD price from Jupiter, or None on failure.
 
     Method Description:
-        Calls the Jupiter Price API v4 with the token's mint address
+        Calls the Jupiter Price API v3 with the token's mint address
         and returns the current USD price. Used for both PnL tracking
         and sell threshold evaluation.
+
+        Calls the Jupiter Price API v3 with the token's mint address
+        and returns the current USD price. Used for both PnL tracking
+        and sell threshold evaluation.
+
+        Common spend tokens (SOL, USDC, USDT) are handled by a whitelist
+        in executeCopy and never passed here, avoiding Jupiter returning
+        null for native mints.
     """
-    def _get_price(self, token_mint: str) -> Optional[float]:
-        try:
-            load_dotenv()
-            url = f"https://api.jup.ag/price/v3?ids={token_mint}"
 
-            headers = {
-                "x-api-key": os.getenv("JUPITER_API_KEY", "")
-            }
+    def _get_price(self, mints: List[str]) -> Dict[str, Optional[float]]:
+        """
+        Fetches prices for multiple mints.
+        Results are cached for the duration of the current poll cycle so
+        Jupiter / DexScreener are never called more than once per mint per poll.
+        Tries Jupiter first (batch), then falls back to DexScreener
+        (per-mint) for any mints Jupiter could not price.
+        Returns a dictionary mapping mint address to its USD price.
+        """
+        if not mints:
+            return {}
 
-            response = requests.get(url, headers=headers, timeout=5)
-            data = response.json()
-            price = data.get("data", {}).get(token_mint, {}).get("price")
-            return float(price) if price is not None else None
-        except Exception as e:
-            print(f"Price fetch error for {token_mint}: {e}")
-            return None
+        # Serve already-fetched prices from the poll-scoped cache
+        uncached = [m for m in mints if m not in self._price_cache]
+
+        if uncached:
+            fetched: Dict[str, Optional[float]] = {m: None for m in uncached}
+
+            # --- Step 1: Jupiter batch call ---
+            try:
+                ids_param = ",".join(uncached)
+                url = f"https://api.jup.ag/price/v3?ids={ids_param}"
+                headers = {
+                    "Accept": "application/json",
+                    "x-api-key": self._jupiter_api_key,
+                }
+                response = requests.get(url, headers=headers, timeout=10)
+
+                if response.status_code == 200:
+                    data = response.json().get("data", {})
+                    for mint in uncached:
+                        if mint in data and data[mint]:
+                            fetched[mint] = float(data[mint]["price"])
+                else:
+                    print(f"  [JUPITER ERROR] Status {response.status_code}")
+
+            except Exception as e:
+                print(f"  [JUPITER ERROR] {e}")
+
+            # --- Step 2: DexScreener fallback for any mints Jupiter missed ---
+            still_missing = [m for m in uncached if fetched[m] is None]
+            for mint in still_missing:
+                try:
+                    url = f"https://api.dexscreener.com/latest/dex/tokens/{mint}"
+                    response = requests.get(url, timeout=10)
+
+                    if response.status_code != 200:
+                        continue
+
+                    pairs = response.json().get("pairs") or []
+                    if not pairs:
+                        continue
+
+                    # Pick the pair with the highest liquidity in USD
+                    best = max(
+                        (p for p in pairs if p.get("priceUsd")),
+                        key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0),
+                        default=None,
+                    )
+                    if best:
+                        fetched[mint] = float(best["priceUsd"])
+                        print(f"  [DEXSCREENER] Priced {mint[:8]}... at ${fetched[mint]:.8f}")
+
+                except Exception as e:
+                    print(f"  [DEXSCREENER ERROR] {mint[:8]}...: {e}")
+
+            # Store all newly fetched results in the poll-scoped cache
+            self._price_cache.update(fetched)
+
+        return {m: self._price_cache[m] for m in mints}
+
 
 
     # -----------------------------------------------------------------------
@@ -738,18 +808,23 @@ class PaperAccount:
             to allocate, independent of the whale's actual spend.
 
         Price:
-            Fetches the real-time Jupiter price for the token.
-            Falls back to the database price_per_token if Jupiter
-            is unavailable.
+            Fetches the real-time Jupiter price for both the spend token
+            (token_out_mint, e.g. SOL/USDC) and the buy token (token_in_mint).
+            The spend token price is checked first — if it cannot be priced
+            the swap is skipped. The buy token price drives the entry price;
+            falls back to the database price_per_token if Jupiter is unavailable.
 
         Persistence:
             Saves the updated account balance and new/updated position
             to the database. Logs the trade to paper_trades.
     """
     def executeCopy(self, swap: dict) -> bool:
-        token_mint = swap["token_out_mint"]
-        token_symbol = token_mint
-        wallet_address = swap["owner"]
+        # token_in_mint  = the token being BOUGHT (received by the whale)
+        # token_out_mint = the token being SPENT  (e.g. SOL/USDC paid by the whale)
+        token_mint      = swap["token_in_mint"]
+        spend_mint      = swap["token_out_mint"]
+        token_symbol    = token_mint
+        wallet_address  = swap["owner"]
 
         amount_usd = self.balance * RISK_PER_TRADE
 
@@ -757,7 +832,30 @@ class PaperAccount:
             print(f"Insufficient balance to copy swap for {token_mint}")
             return False
 
-        price = self._get_price(token_mint)
+        # Check the spend token is a known trusted mint (e.g. SOL, USDC, USDT).
+        # We whitelist these rather than pricing them via Jupiter because Jupiter
+        # can return null for native SOL and stable mints in some API tiers.
+        TRUSTED_SPEND_MINTS = {
+            "So11111111111111111111111111111111111111112",   # Native SOL
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", # USDC
+            "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",  # USDT
+        }
+        if spend_mint not in TRUSTED_SPEND_MINTS:
+            prices = self._get_price([spend_mint, token_mint])
+            price_spend = prices.get(spend_mint)
+            if price_spend is None:
+                print(
+                    f"  [SKIP] Could not fetch price for spend mint {spend_mint}. "
+                    f"Skipping copy of swap for {token_mint}."
+                )
+                return False
+            price = prices.get(token_mint)
+        else:
+            price_spend = None  # trusted mint, no price check needed
+            prices = self._get_price([token_mint])
+            price = prices.get(token_mint)
+
+        # Fetch price of the token we intend to buy.
         if price is None:
             print(f"  Jupiter price unavailable for {token_mint}, using DB price.")
             price = swap["price_per_token"]
@@ -807,10 +905,12 @@ class PaperAccount:
             usd_value=amount_usd,
         )
 
+        spend_price_str = f"${price_spend:.6f}" if price_spend is not None else "trusted"
         print(
             f"  [BUY] {token_symbol} | "
             f"Whale: {wallet_address[:8]}... | "
             f"Spent ${amount_usd:.2f} | "
+            f"SpendMint ({spend_mint[:8]}...) {spend_price_str} | "
             f"Price ${slipped_price:.6f} | "
             f"Tokens {tokens_bought:.4f} | "
             f"Balance ${self.balance:.2f}"
@@ -849,12 +949,22 @@ class PaperAccount:
         now = datetime.now(timezone.utc)
         mints_to_sell = []
 
+        # Fetch all open position prices in a single batch API call
+        open_mints = list(self.positions.keys())
+        prices = self._get_price(open_mints) if open_mints else {}
+
         for token_mint, pos in list(self.positions.items()):
-            current_price = self._get_price(token_mint)
+            current_price = prices.get(token_mint)
 
             if current_price is None:
-                print(f"  [SELL CHECK] Could not fetch price for {token_mint}, skipping.")
-                continue
+                # Fall back to entry_price so time-based exits still fire.
+                # Trailing stop won't trigger at entry price (peak == entry),
+                # but the position won't be stuck open forever.
+                current_price = pos["entry_price"]
+                print(
+                    f"  [SELL CHECK] Could not fetch price for {token_mint}, "
+                    f"using entry price ${current_price:.6f} for exit evaluation."
+                )
 
             # Update and persist peak price if price has risen
             if current_price > pos["peak_price"]:
@@ -992,6 +1102,7 @@ class PaperAccount:
         try:
             while True:
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] --- Poll ---")
+                self._price_cache.clear()
 
                 # Buy side — check for new whale swaps
                 new_swaps = self._fetch_new_swaps()
@@ -1049,10 +1160,16 @@ class PaperAccount:
     """
     def getPortfolioValue(self) -> float:
         total = self.balance
+        if not self.positions:
+            return total
+        open_mints = list(self.positions.keys())
+        prices = self._get_price(open_mints)
         for token_mint, pos in self.positions.items():
-            price = self._get_price(token_mint)
-            if price is not None:
-                total += pos["amount"] * price
+            price = prices.get(token_mint)
+            if price is None:
+                # Fall back to entry_price so portfolio value is never understated
+                price = pos["entry_price"]
+            total += pos["amount"] * price
         return total
 
 
