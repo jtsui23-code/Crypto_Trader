@@ -27,7 +27,7 @@ TRAILING_STOP_PCT = 0.20
 
 # --- Time-Based Exit ---
 # Maximum time to hold a position before force-selling (seconds)
-MAX_HOLD_SECONDS = 1800  # 30 minutes
+MAX_HOLD_SECONDS = 300  # 30 minutes
 
 # ---------------------------------------------------------------------------
 # Other sell thresholds available for future experimentation (not yet active)
