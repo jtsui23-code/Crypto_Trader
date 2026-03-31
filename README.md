@@ -5,6 +5,7 @@ The Crypto Trader Bot is a self-hosted, paper-trading automation system built fo
 ## Setup Instruction:
 1) Download Docker
 2) Enter directory with Dockerfile
-3) Run this command ```docker compose up --build```
-4) Follow by this command ```docker compuse up```
-5) Once done run this command to stopo docker ``docker compose down``
+3) Run this command ```docker compose up```
+4) Once done run this command to stop docker ``docker compose down``
+
+Run ```docker compose up -d``` to run in the background and ```docker compose up --build``` to rebuild 
