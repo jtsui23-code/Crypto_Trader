@@ -1,20 +1,202 @@
 {
-  "generated_at": "2026-03-31T04:48:28.335300+00:00",
+  "generated_at": "2026-04-02T20:44:45.393552+00:00",
   "rpc_used": "https://solana-mainnet.g.alchemy.com/v2/demo",
-  "total": 6,
+  "total": 65,
   "summary": {
-    "ok": 5,
-    "warn": 1,
+    "ok": 49,
+    "warn": 16,
     "flagged": 0,
     "unknown": 0
   },
   "results": [
     {
+      "address": "FRhgF9TXCXyGfUiQ5WsdCGxHUmBXPseenTdnEA4UmUGi",
+      "exists": true,
+      "sol_balance": 64.580560638,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "84pm8CVBrVyTCgG9TwP9hacMB2PaoMdd2R4nFPgqRTuc",
+      "exists": true,
+      "sol_balance": 1.970965581,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "4ScXhkEPVkxhzcJdp89oybDH5LA4iCocxAn1u3oLmvbK",
+      "exists": true,
+      "sol_balance": 1.988883081,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "61MQSdRgpe98pxMn6gcLH4M4MAFr8mAKuoTDFMwbpn6Y",
+      "exists": true,
+      "sol_balance": 8.456018225,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "7z8hbNzmgYvRMNVk27TQm8xW3yXgAkwQVhA6Nht5WEkU",
+      "exists": true,
+      "sol_balance": 137.662065141,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "AnWgJ1csbod2tWS2mZNEyhxo1XWndhNVvzbchh81zZ8k",
+      "exists": true,
+      "sol_balance": 5.361874447,
+      "recent_tx_count": 20,
+      "failed_txs": 4,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "8gDRLa498xXCdch3DvtvjCJ7C1joJ1BpftTDVZztxigv",
+      "exists": true,
+      "sol_balance": 118.508354701,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "6wLkK9AKTcCLiB5mW7pyp9Fq9wchydyatk8XtxKdVHgn",
+      "exists": true,
+      "sol_balance": 131.464504079,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "CsKnRER9Sjpau8Mk9WTZkoBytB2uFnqdmLYR5GTGtaKz",
+      "exists": true,
+      "sol_balance": 21.161829686,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
       "address": "DSRGpLinW2y7RjZeKsXTmBKzw2BQcXHNsimnFW6cMNXd",
       "exists": true,
-      "sol_balance": 17.145497403,
+      "sol_balance": 17.033230665,
       "recent_tx_count": 20,
-      "failed_txs": 5,
+      "failed_txs": 7,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "7 of last 20 txs failed"
+      ]
+    },
+    {
+      "address": "3bCZgKdf253rJBYX1Pj7TvstK81E9peKacA1CgZFtkAb",
+      "exists": true,
+      "sol_balance": 7.078298425,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "AjKCctQtCnCj48tR3YaGm1ZrQtURoodjfg6YKLy97Uub",
+      "exists": true,
+      "sol_balance": 14.817333577,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "J8ZRoEqzNAdKLAQSk4eSpecv47ZgU2VAR8hnAXzss7Gm",
+      "exists": true,
+      "sol_balance": 3.841658105,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "FEXornKkXE2u51WfCGVdEBsmrvquu9UvGPpM9gd986se",
+      "exists": true,
+      "sol_balance": 39.439718282,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "2g5WSNcZHLT1KZEV9byihMyjSmukLmJN6aKZTyq6kMai",
+      "exists": true,
+      "sol_balance": 4.407168318,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "9p7PFT2HYhVKXDsvCZd43d8GRm1jQcWBH7tmawe96b6X",
+      "exists": true,
+      "sol_balance": 10.808665915,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "8DqpugHmWXVcSAYaZs9W2jXnCE4Cx1XbNMsZYC8EU1JV",
+      "exists": true,
+      "sol_balance": 12.518100442,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "3bLSiJ7RTMqypwhNqu6zNC2jcoQdknnGd5Y7feoaPXT9",
+      "exists": true,
+      "sol_balance": 21.110301334,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "H5G1btoS96YZ6fcaDDhAo99A9p4RkenV9XKLw2aPCeaF",
+      "exists": true,
+      "sol_balance": 1.179651132,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
@@ -32,6 +214,56 @@
       ]
     },
     {
+      "address": "FYfSEsc5DxwKH2LbxNpWE9KiGvajN8bYVHSe1mk4oSDy",
+      "exists": true,
+      "sol_balance": 20.169311333,
+      "recent_tx_count": 20,
+      "failed_txs": 4,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "FvYsGPiQoG5A7aQsbQM7bR3VdjY2TKeG8xLwhBQMNQWY",
+      "exists": true,
+      "sol_balance": 11.954435736,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "5VXvg5nXWtpjsNQvt6EXQPQ5ziZBnxhoXDYaz9ZBbXao",
+      "exists": true,
+      "sol_balance": 22.613769006,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "683qAwQbpkiWpSfUsi49BKUcP4XqdJaxGaiBMK4etRvv",
+      "exists": true,
+      "sol_balance": 14.125871218,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "s69tyCAuNtaXUFT6AXoTMPQnHbsSG4nW34qu8oRK9vG",
+      "exists": true,
+      "sol_balance": 24.671977432,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
       "address": "AP1VNSfmgcy9j6tJe4Atx61tCzga5mStHUuxkiub3J89",
       "exists": true,
       "sol_balance": 11.008377932,
@@ -42,9 +274,105 @@
       "notes": []
     },
     {
+      "address": "5vXih4GeYcfQv88R59B5sZaRYEwJzorKpCGhqjAmgTqu",
+      "exists": true,
+      "sol_balance": 64.945534737,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "3P8JV5CSTvngRZv84v82ASD5mo8kBVxKMbk9Yx3TbosU",
+      "exists": true,
+      "sol_balance": 19.676478509,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "Gc2WT9QnTCLffWc88nKXwtqKVWh7dj7eMy9yqZYXevi1",
+      "exists": true,
+      "sol_balance": 14.868621173,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "66svXsZH7NEEsSG6w8RZKmLCDX2csR5y9XFuYQSgszE8",
+      "exists": true,
+      "sol_balance": 14.50357066,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
       "address": "HbA7fZnpyFKS1ye3d6NFkkSfFghJJK6touZXHPJysAPq",
       "exists": true,
-      "sol_balance": 8.090917749,
+      "sol_balance": 7.964736376,
+      "recent_tx_count": 20,
+      "failed_txs": 4,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "BpZB8BhLwCn8SG2cHieUCoK6Lq8f9hrohj1c5yGtGnZe",
+      "exists": true,
+      "sol_balance": 0.0,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "Zero SOL balance",
+        "Account not found on-chain \u2014 may be closed"
+      ]
+    },
+    {
+      "address": "EY8kS2GvTL4vQmQFi6nN2dnGJSFQhwmEMdktYpyLRvtP",
+      "exists": true,
+      "sol_balance": 74.591678484,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "HXhnm8S1pd1KYjoYKrTFLAHnw6ED7nkrp3SmGGddtoLD",
+      "exists": true,
+      "sol_balance": 59.865075224,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "BPHQrgjM2rBzxNMebMJsPCLki36X2tiNFLU2c1W8pD7q",
+      "exists": true,
+      "sol_balance": 0.0,
+      "recent_tx_count": 20,
+      "failed_txs": 5,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "Zero SOL balance",
+        "Account not found on-chain \u2014 may be closed"
+      ]
+    },
+    {
+      "address": "6WLquntFTiEh84JvH3R6fA1k5PQLSUouY7CmEMQwaj34",
+      "exists": true,
+      "sol_balance": 66.776390667,
       "recent_tx_count": 20,
       "failed_txs": 1,
       "gambling_hits": [],
@@ -62,6 +390,28 @@
       "notes": []
     },
     {
+      "address": "4ypxvwdjg7wDvEFLkhKBqCioRmDtKzu1z55C1Sah12Xv",
+      "exists": true,
+      "sol_balance": 11.204926714,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "ADwfrwcpxPdbVw6Hi9cJ8acFPreqanjfYY7siBmJNekS",
+      "exists": true,
+      "sol_balance": 16.800731784,
+      "recent_tx_count": 20,
+      "failed_txs": 7,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "7 of last 20 txs failed"
+      ]
+    },
+    {
       "address": "Hfiz2osmacjZGF9orothxzxN3T2tprqXQURKDNiWHnyz",
       "exists": true,
       "sol_balance": 6.929130739,
@@ -70,6 +420,283 @@
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
+    },
+    {
+      "address": "6baVNHUtfBbA4QjhFnVi5tzGaUoFmrzPSxejA5Vy82Nw",
+      "exists": true,
+      "sol_balance": 0.0,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "Zero SOL balance",
+        "Account not found on-chain \u2014 may be closed"
+      ]
+    },
+    {
+      "address": "FmWHvtBmun5wwUDPPqXRV8p4TsMfHhvFWHV6Gj1hvjhc",
+      "exists": true,
+      "sol_balance": 23.391005854,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "4dGRxKxez5hmcZmBxcsvR5YGuyXRR3xsbKrJex3a1Jfe",
+      "exists": true,
+      "sol_balance": 0.0,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "Zero SOL balance",
+        "Account not found on-chain \u2014 may be closed"
+      ]
+    },
+    {
+      "address": "nazikTJezTC3W2fxXE3wzs495PYzXMiq5o7co6YYACA",
+      "exists": true,
+      "sol_balance": 1.469957908,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "DEbFiYQ58FEDrsq6jY52cLtLCLHdposGNKzmpzH5hd5o",
+      "exists": true,
+      "sol_balance": 0.018352,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "2WHdNBjvaYVTnzc4NSwkJCCk4zXGrCTuKm5NBV3EdU9z",
+      "exists": true,
+      "sol_balance": 0.099701495,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "FSYojWVXvrXNkFfvCAptVhpnWHuJoNzQNu7QSgsecCEz",
+      "exists": true,
+      "sol_balance": 30.15810963,
+      "recent_tx_count": 20,
+      "failed_txs": 20,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "20 of last 20 txs failed"
+      ]
+    },
+    {
+      "address": "5iuDDh6HhW5QdTRN1YfLz2hpv2ktzuRAT2BBTJB1fD8k",
+      "exists": true,
+      "sol_balance": 0.206839205,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "4n6XhGZV4itbUwg6yU7xWTqmtH3mzAuQBBD7KK8LFn5s",
+      "exists": true,
+      "sol_balance": 24.446461522,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "Dfv8M6RUAeDVefkRDEi6nY4pTpBTXTW22yUX9QQeAUJG",
+      "exists": true,
+      "sol_balance": 186.709708473,
+      "recent_tx_count": 20,
+      "failed_txs": 11,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "11 of last 20 txs failed"
+      ]
+    },
+    {
+      "address": "E2T8EDBVU9qjbGvhcN7yBooF4QXsT4qPb1p8B2JiqccL",
+      "exists": true,
+      "sol_balance": 5.467754863,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "GPq5mSL5EEgM3EYKpH2Ltfckf7TpqwouGPRTsJA6a9Mi",
+      "exists": true,
+      "sol_balance": 180.99579138,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "36A6mEN5rYJdVTb6fMqVvG6ez8g2mTYdr1omWcQ1kDKG",
+      "exists": true,
+      "sol_balance": 6.474906148,
+      "recent_tx_count": 20,
+      "failed_txs": 11,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "11 of last 20 txs failed"
+      ]
+    },
+    {
+      "address": "AmNMqM5VbPwtG14gLBdtrqZpQrhSzavLkQPufS8CQ7LB",
+      "exists": true,
+      "sol_balance": 21.214795572,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "9PwMQak8LFpPq1pM9udpjZgJAGZe2GuztjVpmhngXg27",
+      "exists": true,
+      "sol_balance": 10.767033769,
+      "recent_tx_count": 20,
+      "failed_txs": 13,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "13 of last 20 txs failed"
+      ]
+    },
+    {
+      "address": "CgDdf7YcGrqTaYFnbTigKQghxEfRezPLShvPynZUTJUQ",
+      "exists": true,
+      "sol_balance": 0.0,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "Zero SOL balance",
+        "Account not found on-chain \u2014 may be closed"
+      ]
+    },
+    {
+      "address": "HF2EGxkKXRhdR93ZN5fY925PpecZDwRfKwhag6mvFMLW",
+      "exists": true,
+      "sol_balance": 5.000015004,
+      "recent_tx_count": 20,
+      "failed_txs": 11,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "11 of last 20 txs failed"
+      ]
+    },
+    {
+      "address": "FFdBLYqL9rs5fUT38ArE8GV2L3BziEgG5LJUu6sshfkF",
+      "exists": true,
+      "sol_balance": 63.074308351,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "5yShp19bBvzGPrBirv9uG6oNvWf2JHPDrZjP9uQP7YXU",
+      "exists": true,
+      "sol_balance": 0.021124,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "DK8xiZ4yNgWz4nwz3SH1BGRd4rQwQisQ6i1eVHADtwbL",
+      "exists": true,
+      "sol_balance": 29.379893582,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "J79w9MbwEam2ekuvunCNGA4Sfq4dA4uALVZwffUPkCuK",
+      "exists": true,
+      "sol_balance": 66.179694614,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "6PNX3JfGMJG1yZxHmavV8nQ5aKcAFQgsN8xJNsQX8b22",
+      "exists": true,
+      "sol_balance": 4.347284523,
+      "recent_tx_count": 20,
+      "failed_txs": 4,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "75GMVrr2xfgAeybuNg1VMHqFE3GTFJLzEHo6xC4MwUzF",
+      "exists": true,
+      "sol_balance": 17.864229847,
+      "recent_tx_count": 20,
+      "failed_txs": 6,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "6 of last 20 txs failed"
+      ]
+    },
+    {
+      "address": "D5jgZiH1bmdiVkk774iRtFb4s4Y9w8ZPscvTK7hEXitb",
+      "exists": true,
+      "sol_balance": 0.0,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "Zero SOL balance",
+        "Account not found on-chain \u2014 may be closed"
+      ]
+    },
+    {
+      "address": "FDLjPibBiWZkjUBQG6zjNyEcESKqjmpNf658tcVwAjT2",
+      "exists": true,
+      "sol_balance": 0.0,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "Zero SOL balance",
+        "Account not found on-chain \u2014 may be closed"
+      ]
     }
   ]
 }
