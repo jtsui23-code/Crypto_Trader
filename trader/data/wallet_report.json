@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-04-02T20:44:45.393552+00:00",
-  "rpc_used": "https://solana-mainnet.g.alchemy.com/v2/demo",
+  "generated_at": "2026-04-02T21:17:40.900206+00:00",
+  "rpc_used": "https://api.mainnet-beta.solana.com",
   "total": 65,
   "summary": {
-    "ok": 49,
-    "warn": 16,
+    "ok": 59,
+    "warn": 6,
     "flagged": 0,
     "unknown": 0
   },
@@ -32,9 +32,9 @@
     {
       "address": "4ScXhkEPVkxhzcJdp89oybDH5LA4iCocxAn1u3oLmvbK",
       "exists": true,
-      "sol_balance": 1.988883081,
+      "sol_balance": 2.92546378,
       "recent_tx_count": 20,
-      "failed_txs": 2,
+      "failed_txs": 3,
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
@@ -100,18 +100,6 @@
       "notes": []
     },
     {
-      "address": "DSRGpLinW2y7RjZeKsXTmBKzw2BQcXHNsimnFW6cMNXd",
-      "exists": true,
-      "sol_balance": 17.033230665,
-      "recent_tx_count": 20,
-      "failed_txs": 7,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "7 of last 20 txs failed"
-      ]
-    },
-    {
       "address": "3bCZgKdf253rJBYX1Pj7TvstK81E9peKacA1CgZFtkAb",
       "exists": true,
       "sol_balance": 7.078298425,
@@ -164,9 +152,9 @@
     {
       "address": "9p7PFT2HYhVKXDsvCZd43d8GRm1jQcWBH7tmawe96b6X",
       "exists": true,
-      "sol_balance": 10.808665915,
+      "sol_balance": 11.942638659,
       "recent_tx_count": 20,
-      "failed_txs": 2,
+      "failed_txs": 1,
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
@@ -200,18 +188,6 @@
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
-    },
-    {
-      "address": "8B5RJTFhRzDqe9KVaDSiB1ixRNWjVw74DNsKQhDzHEsh",
-      "exists": true,
-      "sol_balance": 6.168887294,
-      "recent_tx_count": 20,
-      "failed_txs": 13,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "13 of last 20 txs failed"
-      ]
     },
     {
       "address": "FYfSEsc5DxwKH2LbxNpWE9KiGvajN8bYVHSe1mk4oSDy",
@@ -306,7 +282,7 @@
     {
       "address": "66svXsZH7NEEsSG6w8RZKmLCDX2csR5y9XFuYQSgszE8",
       "exists": true,
-      "sol_balance": 14.50357066,
+      "sol_balance": 15.657909899,
       "recent_tx_count": 20,
       "failed_txs": 1,
       "gambling_hits": [],
@@ -322,19 +298,6 @@
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
-    },
-    {
-      "address": "BpZB8BhLwCn8SG2cHieUCoK6Lq8f9hrohj1c5yGtGnZe",
-      "exists": true,
-      "sol_balance": 0.0,
-      "recent_tx_count": 20,
-      "failed_txs": 0,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "Zero SOL balance",
-        "Account not found on-chain \u2014 may be closed"
-      ]
     },
     {
       "address": "EY8kS2GvTL4vQmQFi6nN2dnGJSFQhwmEMdktYpyLRvtP",
@@ -355,19 +318,6 @@
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
-    },
-    {
-      "address": "BPHQrgjM2rBzxNMebMJsPCLki36X2tiNFLU2c1W8pD7q",
-      "exists": true,
-      "sol_balance": 0.0,
-      "recent_tx_count": 20,
-      "failed_txs": 5,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "Zero SOL balance",
-        "Account not found on-chain \u2014 may be closed"
-      ]
     },
     {
       "address": "6WLquntFTiEh84JvH3R6fA1k5PQLSUouY7CmEMQwaj34",
@@ -400,18 +350,6 @@
       "notes": []
     },
     {
-      "address": "ADwfrwcpxPdbVw6Hi9cJ8acFPreqanjfYY7siBmJNekS",
-      "exists": true,
-      "sol_balance": 16.800731784,
-      "recent_tx_count": 20,
-      "failed_txs": 7,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "7 of last 20 txs failed"
-      ]
-    },
-    {
       "address": "Hfiz2osmacjZGF9orothxzxN3T2tprqXQURKDNiWHnyz",
       "exists": true,
       "sol_balance": 6.929130739,
@@ -422,19 +360,6 @@
       "notes": []
     },
     {
-      "address": "6baVNHUtfBbA4QjhFnVi5tzGaUoFmrzPSxejA5Vy82Nw",
-      "exists": true,
-      "sol_balance": 0.0,
-      "recent_tx_count": 20,
-      "failed_txs": 0,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "Zero SOL balance",
-        "Account not found on-chain \u2014 may be closed"
-      ]
-    },
-    {
       "address": "FmWHvtBmun5wwUDPPqXRV8p4TsMfHhvFWHV6Gj1hvjhc",
       "exists": true,
       "sol_balance": 23.391005854,
@@ -443,19 +368,6 @@
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
-    },
-    {
-      "address": "4dGRxKxez5hmcZmBxcsvR5YGuyXRR3xsbKrJex3a1Jfe",
-      "exists": true,
-      "sol_balance": 0.0,
-      "recent_tx_count": 20,
-      "failed_txs": 0,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "Zero SOL balance",
-        "Account not found on-chain \u2014 may be closed"
-      ]
     },
     {
       "address": "nazikTJezTC3W2fxXE3wzs495PYzXMiq5o7co6YYACA",
@@ -488,18 +400,6 @@
       "notes": []
     },
     {
-      "address": "FSYojWVXvrXNkFfvCAptVhpnWHuJoNzQNu7QSgsecCEz",
-      "exists": true,
-      "sol_balance": 30.15810963,
-      "recent_tx_count": 20,
-      "failed_txs": 20,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "20 of last 20 txs failed"
-      ]
-    },
-    {
       "address": "5iuDDh6HhW5QdTRN1YfLz2hpv2ktzuRAT2BBTJB1fD8k",
       "exists": true,
       "sol_balance": 0.206839205,
@@ -512,24 +412,12 @@
     {
       "address": "4n6XhGZV4itbUwg6yU7xWTqmtH3mzAuQBBD7KK8LFn5s",
       "exists": true,
-      "sol_balance": 24.446461522,
+      "sol_balance": 29.794163284,
       "recent_tx_count": 20,
-      "failed_txs": 0,
+      "failed_txs": 3,
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
-    },
-    {
-      "address": "Dfv8M6RUAeDVefkRDEi6nY4pTpBTXTW22yUX9QQeAUJG",
-      "exists": true,
-      "sol_balance": 186.709708473,
-      "recent_tx_count": 20,
-      "failed_txs": 11,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "11 of last 20 txs failed"
-      ]
     },
     {
       "address": "E2T8EDBVU9qjbGvhcN7yBooF4QXsT4qPb1p8B2JiqccL",
@@ -552,18 +440,6 @@
       "notes": []
     },
     {
-      "address": "36A6mEN5rYJdVTb6fMqVvG6ez8g2mTYdr1omWcQ1kDKG",
-      "exists": true,
-      "sol_balance": 6.474906148,
-      "recent_tx_count": 20,
-      "failed_txs": 11,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "11 of last 20 txs failed"
-      ]
-    },
-    {
       "address": "AmNMqM5VbPwtG14gLBdtrqZpQrhSzavLkQPufS8CQ7LB",
       "exists": true,
       "sol_balance": 21.214795572,
@@ -574,48 +450,11 @@
       "notes": []
     },
     {
-      "address": "9PwMQak8LFpPq1pM9udpjZgJAGZe2GuztjVpmhngXg27",
-      "exists": true,
-      "sol_balance": 10.767033769,
-      "recent_tx_count": 20,
-      "failed_txs": 13,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "13 of last 20 txs failed"
-      ]
-    },
-    {
-      "address": "CgDdf7YcGrqTaYFnbTigKQghxEfRezPLShvPynZUTJUQ",
-      "exists": true,
-      "sol_balance": 0.0,
-      "recent_tx_count": 20,
-      "failed_txs": 0,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "Zero SOL balance",
-        "Account not found on-chain \u2014 may be closed"
-      ]
-    },
-    {
-      "address": "HF2EGxkKXRhdR93ZN5fY925PpecZDwRfKwhag6mvFMLW",
-      "exists": true,
-      "sol_balance": 5.000015004,
-      "recent_tx_count": 20,
-      "failed_txs": 11,
-      "gambling_hits": [],
-      "verdict": "WARN",
-      "notes": [
-        "11 of last 20 txs failed"
-      ]
-    },
-    {
       "address": "FFdBLYqL9rs5fUT38ArE8GV2L3BziEgG5LJUu6sshfkF",
       "exists": true,
-      "sol_balance": 63.074308351,
+      "sol_balance": 68.998502886,
       "recent_tx_count": 20,
-      "failed_txs": 0,
+      "failed_txs": 2,
       "gambling_hits": [],
       "verdict": "OK",
       "notes": []
@@ -623,7 +462,7 @@
     {
       "address": "5yShp19bBvzGPrBirv9uG6oNvWf2JHPDrZjP9uQP7YXU",
       "exists": true,
-      "sol_balance": 0.021124,
+      "sol_balance": 0.040784,
       "recent_tx_count": 20,
       "failed_txs": 0,
       "gambling_hits": [],
@@ -661,16 +500,111 @@
       "notes": []
     },
     {
-      "address": "75GMVrr2xfgAeybuNg1VMHqFE3GTFJLzEHo6xC4MwUzF",
+      "address": "6z51o3BNbYLJTL7SeGeHJQNpoc7rcWt8f6mzUg533uYe",
       "exists": true,
-      "sol_balance": 17.864229847,
+      "sol_balance": 15.428962366,
       "recent_tx_count": 20,
-      "failed_txs": 6,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "E2FJVgJU2pJ7X7S4vow23RE6Xo5n3HqmE5qiUa9ibE2A",
+      "exists": true,
+      "sol_balance": 1.959224369,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "9PNrgpgVcMJhpEUA37ZLqGbttMYzXGnZX2s3AzZUYk4c",
+      "exists": true,
+      "sol_balance": 72.377343778,
+      "recent_tx_count": 20,
+      "failed_txs": 3,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "HiSo5kykqDPs3EG14Fk9QY4B5RvkuEs8oJTiqPX3EDAn",
+      "exists": true,
+      "sol_balance": 73.250950354,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "AURAEDwoBtWnqkzUfGQ2CVF53BFU5NoTCt5MeL4C1wPu",
+      "exists": true,
+      "sol_balance": 2.905162445,
+      "recent_tx_count": 20,
+      "failed_txs": 9,
       "gambling_hits": [],
       "verdict": "WARN",
       "notes": [
-        "6 of last 20 txs failed"
+        "9 of last 20 txs failed"
       ]
+    },
+    {
+      "address": "BZMF8C6xfgxcBbX26mBvnEswDBAiKaKDiABL9CbkThVH",
+      "exists": true,
+      "sol_balance": 0.0,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "Zero SOL balance",
+        "Account not found on-chain \u2014 may be closed"
+      ]
+    },
+    {
+      "address": "3XSYLa8VqkTV4RxKGG92nQb3gPziFFFEVLCYkEaEtZ5k",
+      "exists": true,
+      "sol_balance": 13.017163457,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "H8KTT1e3F4u9Mw4cn4byAS4Uv1LZJv7QRDr46UPKAMe7",
+      "exists": true,
+      "sol_balance": 4.327824042,
+      "recent_tx_count": 20,
+      "failed_txs": 9,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "9 of last 20 txs failed"
+      ]
+    },
+    {
+      "address": "2CFywHXDPjDK2iRQsb95vnjgncDUZeQKJ6MceJ4ALpdc",
+      "exists": true,
+      "sol_balance": 29.017655749,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "HvJbZSjDjkcKGYpVXuBPLTyqL3rZfego1zkKwdtgNVus",
+      "exists": true,
+      "sol_balance": 38.040210701,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
     },
     {
       "address": "D5jgZiH1bmdiVkk774iRtFb4s4Y9w8ZPscvTK7hEXitb",
@@ -686,7 +620,7 @@
       ]
     },
     {
-      "address": "FDLjPibBiWZkjUBQG6zjNyEcESKqjmpNf658tcVwAjT2",
+      "address": "Bimp1jnFYiS9Db6LmCjvxqoCikYs34injk5MsVAfYAsL",
       "exists": true,
       "sol_balance": 0.0,
       "recent_tx_count": 20,
@@ -697,6 +631,49 @@
         "Zero SOL balance",
         "Account not found on-chain \u2014 may be closed"
       ]
+    },
+    {
+      "address": "55PB376nxsrBLTZr1UdQSk6M89AxPif6oKmbmZmWq5dr",
+      "exists": true,
+      "sol_balance": 64.018803041,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "34m3D6HkEoEtmzU2jEWfK4Kt8LLuPs72VCkJo9JB73Kb",
+      "exists": true,
+      "sol_balance": 0.103735743,
+      "recent_tx_count": 20,
+      "failed_txs": 0,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
+    },
+    {
+      "address": "JBh4bokJ1XJ4vBX8qz3ZLKy9pseRFdr2feUi39gKh6dQ",
+      "exists": true,
+      "sol_balance": 0.0,
+      "recent_tx_count": 20,
+      "failed_txs": 1,
+      "gambling_hits": [],
+      "verdict": "WARN",
+      "notes": [
+        "Zero SOL balance",
+        "Account not found on-chain \u2014 may be closed"
+      ]
+    },
+    {
+      "address": "NULLioEUhd89Jo5Acm9sX88bwjNjrsAVy6KWkXD7qZh",
+      "exists": true,
+      "sol_balance": 0.581080333,
+      "recent_tx_count": 20,
+      "failed_txs": 2,
+      "gambling_hits": [],
+      "verdict": "OK",
+      "notes": []
     }
   ]
 }
