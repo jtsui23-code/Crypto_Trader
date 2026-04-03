@@ -38,43 +38,43 @@ class WhaleListener:
             print(f"Error reading JSON: {e}")
             return []
 
-    async def _listen_to_wallet(self, target):
-        """Opens a dedicated WebSocket connection for a single wallet."""
-        if isinstance(target, dict):
-            address = target.get('address')
-            tag = target.get('tag', 'Unknown')
-        else:
-            address = target
-            tag = f"Whale_{address[:4]}"
-
-        if not address:
-            return
-
-        async with connect(self.rpc_url) as websocket:
-            await websocket.logs_subscribe(
-                filter_=RpcTransactionLogsFilterMentions(
-                    Pubkey.from_string(address)
-                )
-            )
-
-            # Consume the subscription confirmation response
-            resp = await websocket.recv()
-            print(f"Subscribed to {tag}: {address} (sub id: {resp[0].result})")
-
-            async for msg in websocket:
-                await self.process_message(msg)
-
     async def start(self):
         if not self.targets:
             print("No target whales found. Exiting.")
             return
 
-        print(f"Monitoring {len(self.targets)} whales for real-time activity...")
+        # Single connection, all subscriptions multiplexed over it
+        async with connect(self.rpc_url) as websocket:
 
-        # Run one persistent listener per wallet concurrently
-        await asyncio.gather(
-            *[self._listen_to_wallet(target) for target in self.targets]
-        )
+            subscription_map = {}  # sub_id -> tag, for logging
+
+            for target in self.targets:
+                if isinstance(target, dict):
+                    address = target.get('address')
+                    tag = target.get('tag', 'Unknown')
+                else:
+                    address = target
+                    tag = f"Whale_{address[:4]}"
+
+                if not address:
+                    continue
+
+                await websocket.logs_subscribe(
+                    filter_=RpcTransactionLogsFilterMentions(
+                        Pubkey.from_string(address)
+                    )
+                )
+
+                # Consume the subscription confirmation for this wallet before subscribing the next
+                resp = await websocket.recv()
+                sub_id = resp[0].result
+                subscription_map[sub_id] = tag
+                print(f"Subscribed to {tag}: {address} (sub id: {sub_id})")
+
+            print(f"Monitoring {len(subscription_map)} whales on a single connection...")
+
+            async for msg in websocket:
+                await self.process_message(msg)
 
     async def process_message(self, msg):
         if not msg or not hasattr(msg[0], 'params'):
