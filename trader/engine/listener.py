@@ -38,15 +38,11 @@ class WhaleListener:
             print(f"Error reading JSON: {e}")
             return []
 
-    async def start(self):
-        if not self.targets:
-            print("No target whales found. Exiting.")
-            return
-
-        # Single connection, all subscriptions multiplexed over it
+    async def _connect_and_listen(self):
+        """Single attempt to connect, subscribe, and listen. Raises on disconnect."""
         async with connect(self.rpc_url) as websocket:
 
-            subscription_map = {}  # sub_id -> tag, for logging
+            subscription_map = {}
 
             for target in self.targets:
                 if isinstance(target, dict):
@@ -65,7 +61,6 @@ class WhaleListener:
                     )
                 )
 
-                # Consume the subscription confirmation for this wallet before subscribing the next
                 resp = await websocket.recv()
                 sub_id = resp[0].result
                 subscription_map[sub_id] = tag
@@ -75,6 +70,22 @@ class WhaleListener:
 
             async for msg in websocket:
                 await self.process_message(msg)
+
+    async def start(self):
+        if not self.targets:
+            print("No target whales found. Exiting.")
+            return
+
+        retry_delay = 5  # seconds between reconnection attempts
+
+        while True:
+            try:
+                await self._connect_and_listen()
+
+            except Exception as e:
+                print(f"Connection lost: {e}")
+                print(f"Reconnecting in {retry_delay}s...")
+                await asyncio.sleep(retry_delay)
 
     async def process_message(self, msg):
         if not msg or not hasattr(msg[0], 'params'):
