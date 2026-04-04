@@ -8,7 +8,7 @@ from trader.engine.decoder import Decoder
 
 
 class WhaleListener:
-    def __init__(self, rpc_url="https://api.mainnet.solana.com"):
+    def __init__(self, rpc_url="wss://api.mainnet-beta.solana.com"):
         self.rpc_url = rpc_url
         self.targets = self._load_targets()
         self.decoder = Decoder()
@@ -76,7 +76,7 @@ class WhaleListener:
             print("No target whales found. Exiting.")
             return
 
-        retry_delay = 5  # seconds between reconnection attempts
+        retry_delay = 10  # seconds between reconnection attempts
 
         while True:
             try:
