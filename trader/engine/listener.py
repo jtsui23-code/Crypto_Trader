@@ -8,7 +8,7 @@ from trader.engine.decoder import Decoder
 
 
 class WhaleListener:
-    def __init__(self, rpc_url="wss://api.mainnet-beta.solana.com"):
+    def __init__(self, rpc_url="https://api.mainnet.solana.com"):
         self.rpc_url = rpc_url
         self.targets = self._load_targets()
         self.decoder = Decoder()
