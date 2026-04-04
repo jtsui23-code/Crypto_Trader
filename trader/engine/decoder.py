@@ -4,7 +4,11 @@ from solana.rpc.api import Client
 from solders.signature import Signature
 from dotenv import load_dotenv
 from trader.scripts.get_whales import get_whales
+from dotenv import load_dotenv
 
+# Import API key for Helius 
+load_dotenv()
+api_key = os.getenv("HELIUS_API_KEY")
 
 """
 Class Name:
@@ -43,7 +47,7 @@ class Decoder:
         Initializes the Decoder by setting the RPC URL, loading environment variables, 
         and establishing a connection to the Solana RPC client.
     """
-    def __init__(self, rpc_url="https://api.mainnet-beta.solana.com"):
+    def __init__(self, rpc_url=f"wss://mainnet.helius-rpc.com/?api-key={api_key}"):
         load_dotenv()
         self.database_url = os.getenv("DATABASE_URL")
         self.rpc_url = rpc_url
