@@ -10,12 +10,6 @@ For each wallet it reports:
   - Number of recent transactions
   - Whether recent transactions involve known gambling programs
   - A verdict: OK / WARN / FLAGGED
-
-Usage:
-    python wallet_checker.py
-
-Requirements:
-    pip install requests
 """
 
 import json
@@ -58,6 +52,25 @@ GAMBLING_PROGRAMS = {
 
 _active_rpc = RPC_ENDPOINTS[0]
 
+"""
+Method Name:
+    rpc_call
+
+Parameters:
+    method (str):
+        The Solana RPC method name (e.g., 'getBalance').
+    params (list):
+        The arguments required for the specific RPC method.
+
+Return:
+    dict or None:
+        The JSON response from the RPC server, or None if all endpoints fail.
+
+Method Description:
+    Iterates through a list of public RPC endpoints to execute a request.
+    If an endpoint succeeds, it updates the global _active_rpc to favor
+    that node for subsequent calls.
+"""
 def rpc_call(method: str, params: list):
     global _active_rpc
     payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
@@ -73,6 +86,22 @@ def rpc_call(method: str, params: list):
     return None
 
 
+"""
+Method Name:
+    get_balance
+
+Parameters:
+    address (str):
+        The Solana wallet public key.
+
+Return:
+    float or None:
+        The balance in SOL, or None if the RPC call fails.
+
+Method Description:
+    Requests the balance of the specified address and converts the
+    result from lamports to SOL.
+"""
 def get_balance(address: str):
     result = rpc_call("getBalance", [address])
     if result and "result" in result:
@@ -81,6 +110,22 @@ def get_balance(address: str):
     return None
 
 
+"""
+Method Name:
+    get_account_info
+
+Parameters:
+    address (str):
+        The Solana wallet public key.
+
+Return:
+    dict or None:
+        Raw account data if the account exists, otherwise None.
+
+Method Description:
+    Fetches the account details from the blockchain to determine if
+    the account has been initialized or contains data.
+"""
 def get_account_info(address: str):
     result = rpc_call("getAccountInfo", [address, {"encoding": "base58"}])
     if result and "result" in result:
@@ -88,6 +133,24 @@ def get_account_info(address: str):
     return None
 
 
+"""
+Method Name:
+    get_recent_transactions
+
+Parameters:
+    address (str):
+        The Solana wallet public key.
+    limit (int):
+        Maximum number of signatures to retrieve. Defaults to TX_SCAN_LIMIT.
+
+Return:
+    list:
+        A list of transaction signature dictionaries.
+
+Method Description:
+    Retrieves a list of recent transaction signatures for the given address.
+    Does not fetch full transaction details, only the metadata/signatures.
+"""
 def get_recent_transactions(address: str, limit: int = TX_SCAN_LIMIT) -> list:
     result = rpc_call("getSignaturesForAddress", [address, {"limit": limit}])
     if result and "result" in result:
@@ -95,6 +158,22 @@ def get_recent_transactions(address: str, limit: int = TX_SCAN_LIMIT) -> list:
     return []
 
 
+"""
+Method Name:
+    get_transaction
+
+Parameters:
+    signature (str):
+        The unique transaction signature (hash).
+
+Return:
+    dict or None:
+        The full parsed transaction object, or None if not found or failed.
+
+Method Description:
+    Fetches the full details of a specific transaction using its signature.
+    Requested in 'jsonParsed' format for easier inspection of program IDs.
+"""
 def get_transaction(signature: str):
     result = rpc_call(
         "getTransaction",
@@ -109,6 +188,22 @@ def get_transaction(signature: str):
 # Gambling detection
 # ---------------------------------------------------------------------------
 
+"""
+Method Name:
+    check_gambling_in_tx
+
+Parameters:
+    tx (dict):
+        The parsed transaction dictionary returned by the RPC.
+
+Return:
+    list:
+        A list of names of gambling platforms found in the transaction.
+
+Method Description:
+    Scans the accountKeys list of a transaction for known gambling 
+    program addresses. Returns a unique list of human-readable site names.
+"""
 def check_gambling_in_tx(tx: dict) -> list:
     hits = []
     if not tx:
@@ -134,6 +229,25 @@ def check_gambling_in_tx(tx: dict) -> list:
 # Per-wallet check
 # ---------------------------------------------------------------------------
 
+"""
+Method Name:
+    check_wallet
+
+Parameters:
+    address (str):
+        The Solana wallet public key to audit.
+
+Return:
+    dict:
+        A dictionary containing the audit results, status, and verdict.
+
+Method Description:
+    Performs a comprehensive check on a wallet:
+    1. Verifies balance and on-chain existence.
+    2. Analyzes recent transaction history and failure rates.
+    3. Scans for interactions with high-risk/gambling programs.
+    4. Issues a verdict (OK/WARN/FLAGGED) based on finding risk factors.
+"""
 def check_wallet(address: str) -> dict:
     result = {
         "address": address,
@@ -207,6 +321,21 @@ def check_wallet(address: str) -> dict:
 
 ICONS = {"OK": "✅", "WARN": "⚠️ ", "FLAGGED": "🚨", "UNKNOWN": "❓"}
 
+"""
+Method Name:
+    print_result
+
+Parameters:
+    r (dict):
+        The result dictionary returned by check_wallet.
+
+Return:
+    None
+
+Method Description:
+    Formats and prints the wallet audit findings to the console using
+    emojis and indentation for readability.
+"""
 def print_result(r: dict):
     icon = ICONS.get(r["verdict"], "?")
     print(f"\n{icon} {r['address']}")
@@ -224,6 +353,23 @@ def print_result(r: dict):
 # Main
 # ---------------------------------------------------------------------------
 
+"""
+Method Name:
+    main
+
+Parameters:
+    None
+
+Return:
+    None
+
+Method Description:
+    Orchestrates the wallet checking process:
+    1. Loads the target wallets from JSON.
+    2. Loops through wallets with rate-limiting delays.
+    3. Aggregates results and prints a final summary.
+    4. Saves a timestamped JSON report to disk.
+"""
 def main():
     wf = WHALES_FILE
     if not wf.exists():
