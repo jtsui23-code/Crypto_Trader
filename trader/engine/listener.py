@@ -62,23 +62,32 @@ class WhaleListener:
 
     async def _process_message(self, msg):
         try:
-            notif = msg[0]
-            if notif.get("method") != "logsNotification":
+            notif = msg[0]  # LogsNotification object
+            
+            # Check if this is a logs notification (it should be, but be safe)
+            if not hasattr(notif, 'params'):
                 return
-            params = notif.get("params", {})
-            result = params.get("result", {})
-            value = result.get("value", {})
-            signature = value.get("signature")
-            err = value.get("err")
+            
+            # Extract data using attribute access (not dict .get())
+            params = notif.params
+            result = params.result
+            value = result.value
+            signature = str(value.signature)   # convert to string if needed
+            err = value.err
+            
             if not signature:
                 return
             if err is not None:
                 print(f"Transaction {signature} failed (err: {err})")
                 return
+            
             print(f"\n🚨 Whale activity detected! Signature: {signature}")
             await asyncio.to_thread(self.decoder.decode_swap, signature)
+            
         except Exception as e:
             print(f"Error processing message: {e}")
+
+    
 
     async def start(self):
         if not self.targets:
