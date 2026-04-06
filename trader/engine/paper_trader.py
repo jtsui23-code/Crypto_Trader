@@ -27,7 +27,7 @@ TRAILING_STOP_PCT = 0.20
 
 # --- Time-Based Exit ---
 # Maximum time to hold a position before force-selling (seconds)
-MAX_HOLD_SECONDS = 300  # 30 minutes
+MAX_HOLD_SECONDS = 300  # 3 minutes
 
 # ---------------------------------------------------------------------------
 # Other sell thresholds available for future experimentation (not yet active)
@@ -226,6 +226,60 @@ class PaperAccount:
         except Exception as e:
             print(f"Error reading whales.json: {e}")
             return []
+        
+
+
+    """
+    Method Name:
+        resetPortfolio
+
+    Parameters:
+        newBalance (float):
+            The balance to reset the account to. Defaults to the
+            original initialBalance set at construction time.
+
+    Return:
+        None
+
+    Method Description:
+        Resets the paper trading account to a clean state.
+
+        - Force-closes all open positions without executing sells or
+        updating trader performance stats.
+        - Wipes the in-memory trade history.
+        - Restores the cash balance to newBalance (defaults to initialBalance).
+        - Clears all rows from paper_positions in the database.
+        - Persists the reset balance to paper_account.
+        - Resets _last_seen_swap_id to the current max swap ID so the
+        engine does not replay old swaps after the reset.
+    """
+    def resetPortfolio(self, newBalance: float = None):
+        if newBalance is None:
+            newBalance = self.initialBalance
+
+        # Clear in-memory state
+        self.positions.clear()
+        self.tradeHistory.clear()
+        self.balance = newBalance
+        self.initialBalance = newBalance
+
+        # Wipe open positions from the database
+        if self._db_conn is not None:
+            try:
+                cursor = self._db_conn.cursor()
+                cursor.execute("DELETE FROM paper_positions")
+                cursor.close()
+            except Exception as e:
+                print(f"Error clearing positions during reset: {e}")
+
+        # Persist the reset balance
+        self._save_account()
+
+        # Advance the swap cursor so stale swaps are not replayed
+        self._last_seen_swap_id = self._get_max_swap_id()
+
+        print(f"Portfolio reset. Balance restored to ${self.balance:.2f}.")
+
 
 
     # -----------------------------------------------------------------------
@@ -857,8 +911,8 @@ class PaperAccount:
 
         # Fetch price of the token we intend to buy.
         if price is None:
-            print(f"  Jupiter price unavailable for {token_mint}, using DB price.")
-            price = swap["price_per_token"]
+            print(f"  [SKIP] Jupiter/DexScreener price unavailable for {token_mint}. Skipping copy.")
+            return False
 
         slipped_price = price * 1.02
         tokens_bought = amount_usd / slipped_price
@@ -1064,13 +1118,17 @@ class PaperAccount:
         self._update_trader_performance(wallet_address, realised_pnl)
 
         print(
-            f"  [SELL] {token_symbol} | "
-            f"Reason: {reason} | "
-            f"Price ${slipped_price:.6f} | "
-            f"Proceeds ${proceeds:.2f} | "
-            f"Realised PnL ${realised_pnl:+.2f} | "
-            f"Balance ${self.balance:.2f}"
+            f"---------------------------------------------------------------------------------------------------------------------------"
+            f"\n[SELL] {token_symbol} |\n "
+            f"Reason: {reason} |\n "
+            f"Price ${slipped_price:.6f} |\n "
+            f"Proceeds ${proceeds:.2f} |\n "
+            f"Realised PnL ${realised_pnl:+.2f} |\n "
+            f"Balance ${self.balance:.2f}\n"
+            f"---------------------------------------------------------------------------------------------------------------------------"
+
         )
+
 
 
     # -----------------------------------------------------------------------

@@ -1,15 +1,17 @@
 import asyncio
-import time
+import os
+import json
 from pathlib import Path
 from solana.rpc.api import Client
 from solders.pubkey import Pubkey
-from decoder import Decoder   # your decoder class
+from solders.rpc.responses import SubscriptionResult, LogsNotification
+from trader.engine.decoder import Decoder   # adjust import if needed
 
-class PollingWhaleListener:
-    def __init__(self, rpc_url="https://api.mainnet-beta.solana.com", poll_interval=5):
-        self.client = Client(rpc_url)
-        self.decoder = Decoder(rpc_url=rpc_url)   # pass same RPC for consistency
-        self.poll_interval = poll_interval
+HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
+
+class WhaleListener:
+    def __init__(self, rpc_url="wss://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"):
+        self.rpc_url = rpc_url
         self.targets = self._load_targets()
         self.last_seen = {}   # wallet -> last processed signature
 
@@ -37,38 +39,97 @@ class PollingWhaleListener:
             print(f"Error reading {file_path}: {e}")
             return []
 
-    async def _check_wallet(self, wallet):
-        """Check for new transactions on a single wallet."""
-        try:
-            pubkey = Pubkey.from_string(wallet)
-            resp = self.client.get_signatures_for_address(pubkey, limit=1)
-            if not resp.value:
+    async def _connect_and_listen(self):
+        async with connect(self.rpc_url) as websocket:
+            subscribed_addresses = []
+            for address in self.targets:
+                try:
+                    pubkey = Pubkey.from_string(address)
+                    await websocket.logs_subscribe(
+                        filter_=RpcTransactionLogsFilterMentions(pubkey),
+                        commitment="confirmed",
+                    )
+                    subscribed_addresses.append(address)
+                except Exception as e:
+                    print(f"Failed to subscribe to {address}: {e}")
+
+            if not subscribed_addresses:
+                print("No subscriptions sent. Aborting.")
                 return
-            
-            # Polls the latest signautre to see if something new happened.
-            latest_sig = str(resp.value[0].signature)
 
-            # Gets thes the last saved signature
-            last = self.last_seen.get(wallet)
+            subscription_map = {}
+            confirmed = 0
+            needed = len(subscribed_addresses)
 
-            # Sees if the polled singature is new
-            if latest_sig != last:
-                print(f"\n📡 New activity on {wallet[:6]}...{wallet[-4:]}: {latest_sig}")
-                # Process the new transaction (this will call decode_swap and save to DB)
-                await asyncio.to_thread(self.decoder.decode_swap, latest_sig)
-                self.last_seen[wallet] = latest_sig
+            async for msg in websocket:
+                try:
+                    notif = msg[0]
+                except (IndexError, TypeError):
+                    continue
+
+                if isinstance(notif, SubscriptionResult):
+                    sub_id = notif.result
+                    if confirmed < needed:
+                        address = subscribed_addresses[confirmed]
+                        subscription_map[sub_id] = address
+                        confirmed += 1
+                        print(f"Subscribed to {address[:6]}...{address[-4:]} (id: {sub_id})")
+                        if confirmed >= needed:
+                            print(f"All {confirmed} subscriptions confirmed. Monitoring whales...")
+
+                elif isinstance(notif, LogsNotification):
+                    # Fire and forget — never await decode work inside the websocket loop
+                    asyncio.create_task(
+                        self._process_message(notif, subscription_map)
+                    )
+
+    async def _decode_with_retry(self, signature: str, max_attempts: int = 5, base_delay: float = 1.5):
+        """Retry decode_swap with exponential backoff to allow the tx to propagate."""
+        for attempt in range(max_attempts):
+            try:
+                result = await asyncio.to_thread(self.decoder.decode_swap, signature)
+                return result
+            except Exception as e:
+                err_str = str(e).lower()
+                if "not found" in err_str or err_str == "":
+                    delay = base_delay * (2 ** attempt)
+                    if attempt < max_attempts - 1:
+                        await asyncio.sleep(delay)
+                    else:
+                        print(f"Gave up decoding {signature[:12]}... after {max_attempts} attempts")
+                else:
+                    print(f"Decode error for {signature[:12]}...: {type(e).__name__}: {e}")
+                    return
+
+    async def _process_message(self, notif: "LogsNotification", subscription_map: dict):
+        try:
+            sub_id = notif.subscription
+            whale_address = subscription_map.get(sub_id, "unknown")
+
+            value = notif.result.value
+            signature = str(value.signature)
+            err = value.err
+
+            if not signature:
+                return
+
+            if err is not None:
+                print(f"Transaction {signature} for {whale_address[:6]}...{whale_address[-4:]} failed (err: {err})")
+                return
+
+            print(f"\nWhale activity detected! Wallet: {whale_address[:6]}...{whale_address[-4:]} | Sig: {signature}")
+            await self._decode_with_retry(signature)
 
         except Exception as e:
-            print(f"Error checking wallet {wallet}: {e}")
+            print(f"Error processing message: {type(e).__name__}: {e}")
 
     async def start(self):
         if not self.targets:
             print("No whale addresses to monitor. Exiting.")
             return
 
-        # Initialize last_seen with the current latest signature for each wallet
-        print("Initializing last seen signatures...")
-        for wallet in self.targets:
+        retry_delay = 10
+        while True:
             try:
                 pubkey = Pubkey.from_string(wallet)
                 resp = self.client.get_signatures_for_address(pubkey, limit=1)
@@ -92,6 +153,7 @@ class PollingWhaleListener:
             sleep_time = max(0, self.poll_interval - elapsed)
             if sleep_time > 0:
                 await asyncio.sleep(sleep_time)
+
 
 if __name__ == "__main__":
     listener = PollingWhaleListener(poll_interval=5)  # check every 5 seconds
