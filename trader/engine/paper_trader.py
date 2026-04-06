@@ -21,23 +21,30 @@ POLL_INTERVAL_SECONDS = 5
 # Fraction of current balance to risk on each copied trade (e.g. 0.05 = 5%)
 RISK_PER_TRADE = 0.05
 
-# --- Trailing Stop ---
+# --- Take Profit (Split A) ---
+# Sell this fraction of the position when price rises TAKE_PROFIT_PCT above entry.
+# e.g. 0.50 = sell 50% of tokens when price is up 50% from entry.
+TAKE_PROFIT_PCT   = 0.50   # Gain threshold that triggers the partial exit (50%)
+TAKE_PROFIT_SPLIT = 0.50   # Fraction of the position to sell at the TP target  (50%)
+
+# --- Trailing Stop (Split B) ---
+# Applied to the remaining tokens after the TP split has fired (or to the full
+# position if TP has not triggered yet).
 # How far the price can drop from the position's peak before selling (e.g. 0.20 = 20%)
-TRAILING_STOP_PCT = 0.20
+TRAILING_STOP_PCT = 0.35
+
+# --- Hard Stop-Loss ---
+# Sell the ENTIRE remaining position immediately if price drops this far below entry.
+# e.g. 0.15 = exit at a 15% loss from entry price.
+STOP_LOSS_PCT = 0.15
 
 # --- Time-Based Exit ---
 # Maximum time to hold a position before force-selling (seconds)
-MAX_HOLD_SECONDS = 300  # 3 minutes
+MAX_HOLD_SECONDS = 70  # 3 minutes
 
 # ---------------------------------------------------------------------------
 # Other sell thresholds available for future experimentation (not yet active)
 # ---------------------------------------------------------------------------
-# TAKE_PROFIT_PCT       = 0.50   # Sell 100% when up X% from entry
-# PARTIAL_TAKE_PROFIT   = {      # Sell portions at multiple targets
-#     0.50: 0.50,                #   sell 50% of position at +50%
-#     2.00: 0.50,                #   sell remaining 50% at +200%
-# }
-# STOP_LOSS_PCT         = 0.15   # Hard stop — sell immediately if down X% from entry
 # MAX_ALLOCATION_PCT    = 0.30   # Trim position if it grows beyond X% of portfolio
 # VOLUME_DROP_EXIT      = True   # Sell if 5-min volume drops sharply (needs price API extension)
 # WHALE_EXIT_MIRROR     = True   # Sell when the whale sells the same token (full copy)
@@ -124,12 +131,13 @@ Member Variables:
         Open positions keyed by token_out_mint. Each entry holds:
             token_out_mint  - mint address of the held token
             token_symbol    - human readable label
-            amount          - quantity of tokens held
+            amount          - quantity of tokens currently held
             entry_price     - average price paid per token (after slippage)
             peak_price      - highest price seen since entry
             entry_time      - datetime the position was opened
             cost_basis      - total USD spent on the position
             wallet_address  - whale wallet that triggered the buy
+            tp_sold         - True once the TAKE_PROFIT_SPLIT partial exit has fired
     tradeHistory (List[Trade]):
         In-memory list of all trades executed this session.
     initialBalance (float):
@@ -161,7 +169,7 @@ class PaperAccount:
         account state and open positions, and sets the baseline swap ID
         so only new swaps are processed.
     """
-    def __init__(self, initialBalance: float = 10000.0):
+    def __init__(self, initialBalance: float = 10000.0, reset:bool = False):
         self.initialBalance = initialBalance
         self.balance = initialBalance
         self.positions: Dict[str, dict] = {}
@@ -178,6 +186,9 @@ class PaperAccount:
         self._ensure_trader_performance_rows()
         self._load_state()
         self._last_seen_swap_id = self._get_max_swap_id()
+
+        if reset:
+            self.resetPortfolio()
 
 
     # -----------------------------------------------------------------------
@@ -375,6 +386,7 @@ class PaperAccount:
                     "entry_time":     entry_time,
                     "cost_basis":     float(row[6]),
                     "wallet_address": row[7],
+                    "tp_sold":        False,  # conservatively reset on restart
                 }
 
             if rows:
@@ -930,6 +942,8 @@ class PaperAccount:
             existing["entry_price"] = avg_price
             existing["peak_price"]  = max(existing["peak_price"], slipped_price)
             existing["cost_basis"] += amount_usd
+            # tp_sold is intentionally preserved — a TP that already fired on
+            # the old tokens does not reset just because we averaged in.
         else:
             self.positions[token_mint] = {
                 "token_out_mint": token_mint,
@@ -940,6 +954,7 @@ class PaperAccount:
                 "entry_time":     now,
                 "cost_basis":     amount_usd,
                 "wallet_address": wallet_address,
+                "tp_sold":        False,
             }
 
         self.tradeHistory.append(
@@ -987,21 +1002,33 @@ class PaperAccount:
         None
 
     Method Description:
-        Iterates over all open positions and checks two sell conditions
-        against the current real-time Jupiter price:
+        Iterates over all open positions and checks sell conditions in
+        priority order against the current real-time Jupiter price:
 
-        1. Trailing Stop:
+        1. Hard Stop-Loss (full exit):
+               If the current price is more than STOP_LOSS_PCT below the
+               position's entry price, sell the entire remaining position
+               immediately regardless of any other condition.
+
+        2. Take Profit — Split A (partial exit):
+               If the current price is at least TAKE_PROFIT_PCT above entry
+               AND the TP split has not yet fired (tp_sold == False), sell
+               TAKE_PROFIT_SPLIT of the current token balance at market.
+               Sets tp_sold = True so this fires only once per position.
+
+        3. Trailing Stop — Split B (full exit of remainder):
                If the current price has dropped more than TRAILING_STOP_PCT
-               below the position's peak price, sell immediately.
-               The peak price is updated and persisted if price has risen.
+               below the position's peak price, sell whatever tokens remain.
+               The peak price is updated and persisted whenever price rises.
 
-        2. Time-Based Exit:
+        4. Time-Based Exit (full exit):
                If the position has been held longer than MAX_HOLD_SECONDS,
-               sell regardless of price action.
+               sell the entire remaining position regardless of price action.
     """
     def evaluateSells(self):
         now = datetime.now(timezone.utc)
-        mints_to_sell = []
+        partial_sells = []   # (token_mint, price, fraction, reason)
+        full_sells    = []   # (token_mint, price, reason)
 
         # Fetch all open position prices in a single batch API call
         open_mints = list(self.positions.keys())
@@ -1012,8 +1039,6 @@ class PaperAccount:
 
             if current_price is None:
                 # Fall back to entry_price so time-based exits still fire.
-                # Trailing stop won't trigger at entry price (peak == entry),
-                # but the position won't be stuck open forever.
                 current_price = pos["entry_price"]
                 print(
                     f"  [SELL CHECK] Could not fetch price for {token_mint}, "
@@ -1025,7 +1050,33 @@ class PaperAccount:
                 pos["peak_price"] = current_price
                 self._save_position(token_mint)
 
-            # --- Trailing Stop ---
+            # --- 1. Hard Stop-Loss (full exit) ---
+            stop_loss_price = pos["entry_price"] * (1 - STOP_LOSS_PCT)
+            if current_price <= stop_loss_price:
+                print(
+                    f"  [STOP LOSS] {pos['token_symbol']} | "
+                    f"Entry ${pos['entry_price']:.6f} | "
+                    f"Current ${current_price:.6f} | "
+                    f"Stop ${stop_loss_price:.6f}"
+                )
+                full_sells.append((token_mint, current_price, "STOP_LOSS"))
+                continue
+
+            # --- 2. Take Profit — Split A (partial exit, fires once) ---
+            if not pos["tp_sold"]:
+                take_profit_price = pos["entry_price"] * (1 + TAKE_PROFIT_PCT)
+                if current_price >= take_profit_price:
+                    print(
+                        f"  [TAKE PROFIT] {pos['token_symbol']} | "
+                        f"Entry ${pos['entry_price']:.6f} | "
+                        f"Current ${current_price:.6f} | "
+                        f"Target ${take_profit_price:.6f} | "
+                        f"Selling {TAKE_PROFIT_SPLIT*100:.0f}% of position"
+                    )
+                    partial_sells.append((token_mint, current_price, TAKE_PROFIT_SPLIT, "TAKE_PROFIT"))
+                    continue
+
+            # --- 3. Trailing Stop — Split B (full exit of remaining tokens) ---
             trailing_stop_price = pos["peak_price"] * (1 - TRAILING_STOP_PCT)
             if current_price <= trailing_stop_price:
                 print(
@@ -1034,10 +1085,10 @@ class PaperAccount:
                     f"Current ${current_price:.6f} | "
                     f"Stop ${trailing_stop_price:.6f}"
                 )
-                mints_to_sell.append((token_mint, current_price, "TRAILING_STOP"))
+                full_sells.append((token_mint, current_price, "TRAILING_STOP"))
                 continue
 
-            # --- Time-Based Exit ---
+            # --- 4. Time-Based Exit (full exit) ---
             entry_time = pos["entry_time"]
             if entry_time.tzinfo is None:
                 entry_time = entry_time.replace(tzinfo=timezone.utc)
@@ -1049,10 +1100,96 @@ class PaperAccount:
                     f"Held {held_seconds / 60:.1f} min | "
                     f"Current ${current_price:.6f}"
                 )
-                mints_to_sell.append((token_mint, current_price, "TIME_EXIT"))
+                full_sells.append((token_mint, current_price, "TIME_EXIT"))
 
-        for token_mint, price, reason in mints_to_sell:
+        for token_mint, price, fraction, reason in partial_sells:
+            self._sellPartialPosition(token_mint, price, fraction, reason)
+
+        for token_mint, price, reason in full_sells:
             self._sellPosition(token_mint, price, reason)
+
+
+    """
+    Method Name:
+        _sellPartialPosition
+
+    Parameters:
+        token_mint (str):
+            Mint address of the token to partially sell.
+        price (float):
+            Current market price to sell at.
+        fraction (float):
+            Fraction of the current token balance to sell (e.g. 0.50 = 50%).
+        reason (str):
+            Label for why the partial sell was triggered (e.g. 'TAKE_PROFIT').
+
+    Return:
+        None
+
+    Method Description:
+        Executes a partial exit of an open position.
+
+        - Sells `fraction` of the current token amount at 2% sell slippage.
+        - Credits proceeds to balance.
+        - Reduces the position's amount and cost_basis proportionally.
+        - Sets tp_sold = True so this path cannot fire again for this position.
+        - Persists the updated position and account balance.
+        - Logs the partial trade to paper_trades (no trader performance update
+          because the position is still open).
+    """
+    def _sellPartialPosition(self, token_mint: str, price: float, fraction: float, reason: str):
+        if token_mint not in self.positions:
+            return
+
+        pos             = self.positions[token_mint]
+        sell_amount     = pos["amount"] * fraction
+        token_symbol    = pos["token_symbol"]
+        wallet_address  = pos["wallet_address"]
+
+        slipped_price   = price * 0.98
+        proceeds        = sell_amount * slipped_price
+        partial_cost    = pos["cost_basis"] * fraction
+        realised_pnl    = proceeds - partial_cost
+
+        self.balance       += proceeds
+        pos["amount"]      -= sell_amount
+        pos["cost_basis"]  -= partial_cost
+        pos["tp_sold"]      = True
+
+        now = datetime.now(timezone.utc)
+        self.tradeHistory.append(
+            Trade(token_symbol, 'SELL', slipped_price, sell_amount, now)
+        )
+
+        # Persist updated position and account balance
+        self._save_position(token_mint)
+        self._save_account()
+        self._log_trade(
+            wallet_address=wallet_address,
+            token_out_mint=token_mint,
+            token_symbol=token_symbol,
+            side='SELL',
+            price=slipped_price,
+            amount=sell_amount,
+            usd_value=proceeds,
+            sell_reason=reason,
+            realised_pnl=realised_pnl,
+        )
+
+        print(
+            f"---------------------------------------------------------------------------------------------------------------------------"
+            f"\n[PARTIAL SELL] {token_symbol} |\n "
+            f"Reason: {reason} |\n "
+            f"Sold {fraction*100:.0f}% ({sell_amount:.4f} tokens) |\n "
+            f"Price ${slipped_price:.6f} |\n "
+            f"Proceeds ${proceeds:.2f} |\n "
+            f"Partial PnL ${realised_pnl:+.2f} |\n "
+            f"Remaining {pos['amount']:.4f} tokens | "
+            f"Balance ${self.balance:.2f}\n"
+            f"---------------------------------------------------------------------------------------------------------------------------"
+        )
+
+
 
 
     """
@@ -1305,5 +1442,5 @@ class PaperAccount:
 
 
 if __name__ == "__main__":
-    account = PaperAccount(initialBalance=10000.0)
+    account = PaperAccount(initialBalance=10000.0, reset=True)
     account.run()
