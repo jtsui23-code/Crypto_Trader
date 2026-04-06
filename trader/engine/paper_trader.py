@@ -857,8 +857,8 @@ class PaperAccount:
 
         # Fetch price of the token we intend to buy.
         if price is None:
-            print(f"  Jupiter price unavailable for {token_mint}, using DB price.")
-            price = swap["price_per_token"]
+            print(f"  [SKIP] Jupiter/DexScreener price unavailable for {token_mint}. Skipping copy.")
+            return False
 
         slipped_price = price * 1.02
         tokens_bought = amount_usd / slipped_price
