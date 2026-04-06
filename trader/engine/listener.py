@@ -2,16 +2,18 @@ import asyncio
 import os
 import json
 from pathlib import Path
+from dotenv import load_dotenv  
 from solana.rpc.websocket_api import connect
 from solders.rpc.config import RpcTransactionLogsFilterMentions
 from solders.pubkey import Pubkey
 from solders.rpc.responses import SubscriptionResult, LogsNotification
-from trader.engine.decoder import Decoder   # adjust import if needed
+from trader.engine.decoder import Decoder
 
+load_dotenv()
 HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
 
 class WhaleListener:
-    def __init__(self, rpc_url="wss://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"):
+    def __init__(self, rpc_url=f"wss://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"):
         self.rpc_url = rpc_url
         self.targets = self._load_targets()
         self.decoder = Decoder()

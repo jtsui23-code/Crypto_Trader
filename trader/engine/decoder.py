@@ -1,4 +1,5 @@
 import os
+from dotenv import load_dotenv  
 import psycopg2
 import psycopg2.pool
 from solana.rpc.api import Client
@@ -8,10 +9,12 @@ from dotenv import load_dotenv
 from trader.scripts.get_whales import get_whales
 
 SOL_MINT = "So11111111111111111111111111111111111111112"
+
+load_dotenv()
 HELIUS_API_KEY = os.getenv("HELIUS_API_KEY", "")
 
 class Decoder:
-    def __init__(self, rpc_url="https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"):
+    def __init__(self, rpc_url=f"https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}"):
         load_dotenv()
         self.database_url = os.getenv("DATABASE_URL")
         self.rpc_url = rpc_url
