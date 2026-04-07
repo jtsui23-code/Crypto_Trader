@@ -3,9 +3,10 @@ import json
 import time
 import requests
 import psycopg2
+import itertools
 from pathlib import Path
 from dotenv import load_dotenv
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 
 load_dotenv()
@@ -24,8 +25,8 @@ RISK_PER_TRADE = 0.05
 # --- Take Profit (Split A) ---
 # Sell this fraction of the position when price rises TAKE_PROFIT_PCT above entry.
 # e.g. 0.50 = sell 50% of tokens when price is up 50% from entry.
-TAKE_PROFIT_PCT   = 0.50   # Gain threshold that triggers the partial exit (50%)
-TAKE_PROFIT_SPLIT = 0.50   # Fraction of the position to sell at the TP target  (50%)
+TAKE_PROFIT_PCT   = 0.2   # Gain threshold that triggers the partial exit (50%)
+TAKE_PROFIT_SPLIT = 0.7   # Fraction of the position to sell at the TP target  (50%)
 
 # --- Trailing Stop (Split B) ---
 # Applied to the remaining tokens after the TP split has fired (or to the full
@@ -48,6 +49,59 @@ MAX_HOLD_SECONDS = 70  # 3 minutes
 # MAX_ALLOCATION_PCT    = 0.30   # Trim position if it grows beyond X% of portfolio
 # VOLUME_DROP_EXIT      = True   # Sell if 5-min volume drops sharply (needs price API extension)
 # WHALE_EXIT_MIRROR     = True   # Sell when the whale sells the same token (full copy)
+
+
+# ---------------------------------------------------------------------------
+# Configuration Testing Mode
+# ---------------------------------------------------------------------------
+# Set CONFIG_TEST_MODE = True to iterate through every permutation of the
+# parameter grids below automatically. The engine runs SAMPLE_SIZE completed
+# sell trades per permutation, logs PnL, then resets and moves to the next.
+# Set CONFIG_TEST_MODE = False to run indefinitely with the defaults above.
+# ---------------------------------------------------------------------------
+
+CONFIG_TEST_MODE = False  # <-- Toggle this flag to enable/disable config testing
+
+# Number of completed sell trades required before rotating to the next config.
+SAMPLE_SIZE = 100
+
+# ---------------------------------------------------------------------------
+# Parameter grids — add/remove values freely.
+# Every combination is generated automatically via itertools.product.
+# Order: [RISK_PER_TRADE, TAKE_PROFIT_PCT, TAKE_PROFIT_SPLIT,
+#         TRAILING_STOP_PCT, STOP_LOSS_PCT, MAX_HOLD_SECONDS]
+# ---------------------------------------------------------------------------
+_PARAM_GRID = (
+    # RISK_PER_TRADE — 3% to 10%
+    [round(x * 0.01, 2) for x in range(3, 11)],
+    # Result: [0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]
+
+    # TAKE_PROFIT_PCT — 10% to 50%
+    [round(x * 0.01, 2) for x in range(10, 51)],
+    # Result: [0.1, 0.11, 0.12, ..., 0.49, 0.5]
+
+    # TAKE_PROFIT_SPLIT — 20% to 78%
+    [round(x * 0.01, 2) for x in range(20, 79)],
+    # Result: [0.2, 0.51, 0.52, ..., 0.78]
+
+    # TRAILING_STOP_PCT — 20% to 50%
+    [round(x * 0.01, 2) for x in range(20, 51)],
+    # Result: [0.2, 0.21, 0.22, ..., 0.5]
+
+    # STOP_LOSS_PCT — 10% to 40%
+    [round(x * 0.01, 2) for x in range(10, 41)],
+    # Result: [0.1, 0.11, 0.12, ..., 0.4]
+
+    # MAX_HOLD_SECONDS — maximum hold time before forced exit
+    [60, 120, 180],
+)
+
+# Auto-generate every permutation — each entry is a plain tuple:
+# (risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s)
+TRADING_CONFIGS = list(itertools.product(*_PARAM_GRID))
+
+# Path where JSON results are written
+CONFIG_TEST_LOG_PATH = Path("config_test_results.json")
 
 
 """
@@ -187,6 +241,20 @@ class PaperAccount:
         self._load_state()
         self._last_seen_swap_id = self._get_max_swap_id()
 
+        # -----------------------------------------------------------------------
+        # Trade counter and configuration testing state
+        # -----------------------------------------------------------------------
+        # Counts completed sell events (full or partial) in the current config run.
+        self.trade_count: int = 0
+
+        # Index into TRADING_CONFIGS for the currently active config.
+        # Only relevant when CONFIG_TEST_MODE is True.
+        self._config_index: int = 0
+
+        # Apply the first config immediately if testing mode is active.
+        if CONFIG_TEST_MODE:
+            self._apply_config(self._config_index)
+
         if reset:
             self.resetPortfolio()
 
@@ -290,6 +358,218 @@ class PaperAccount:
         self._last_seen_swap_id = self._get_max_swap_id()
 
         print(f"Portfolio reset. Balance restored to ${self.balance:.2f}.")
+
+
+    # -----------------------------------------------------------------------
+    # Configuration testing helpers
+    # -----------------------------------------------------------------------
+
+    """
+    Method Name:
+        _apply_config
+
+    Parameters:
+        index (int):
+            Index into TRADING_CONFIGS to apply.
+
+    Return:
+        None
+
+    Method Description:
+        Overwrites the module-level trading constants with the values from
+        TRADING_CONFIGS[index]. This allows the engine to test different
+        strategy parameters without restarting.
+    """
+    def _apply_config(self, index: int):
+        global RISK_PER_TRADE, TAKE_PROFIT_PCT, TAKE_PROFIT_SPLIT
+        global TRAILING_STOP_PCT, STOP_LOSS_PCT, MAX_HOLD_SECONDS
+
+        (RISK_PER_TRADE, TAKE_PROFIT_PCT, TAKE_PROFIT_SPLIT,
+         TRAILING_STOP_PCT, STOP_LOSS_PCT, MAX_HOLD_SECONDS) = TRADING_CONFIGS[index]
+
+        print(
+            f"\n{'='*60}\n"
+            f"[CONFIG TEST] Config {index + 1}/{len(TRADING_CONFIGS)}\n"
+            f"  risk={RISK_PER_TRADE} | tp={TAKE_PROFIT_PCT} | "
+            f"tp_split={TAKE_PROFIT_SPLIT} | ts={TRAILING_STOP_PCT} | "
+            f"sl={STOP_LOSS_PCT} | hold={MAX_HOLD_SECONDS}s\n"
+            f"{'='*60}\n"
+        )
+
+
+    """
+    Method Name:
+        _log_config_result
+
+    Parameters:
+        config_name (str):
+            Human-readable name of the config that just completed.
+        pnl (float):
+            Realised PnL for this config run.
+        trade_count (int):
+            Number of completed sell trades in this run.
+        start_balance (float):
+            Portfolio balance at the start of this config run.
+        end_balance (float):
+            Portfolio balance at the end of this config run.
+
+    Return:
+        None
+
+    Method Description:
+        Appends a result record to config_test_results.json.
+        Each record captures the config parameters, PnL, trade
+        count, and timestamps so results persist across runs.
+    """
+    def _log_config_result(
+        self,
+        pnl: float,
+        trade_count: int,
+        start_balance: float,
+        end_balance: float,
+    ):
+        risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s = TRADING_CONFIGS[self._config_index]
+        record = {
+            "timestamp":       datetime.now(timezone.utc).isoformat(),
+            "config_index":    self._config_index,
+            "parameters": {
+                "RISK_PER_TRADE":    risk,
+                "TAKE_PROFIT_PCT":   tp_pct,
+                "TAKE_PROFIT_SPLIT": tp_split,
+                "TRAILING_STOP_PCT": ts_pct,
+                "STOP_LOSS_PCT":     sl_pct,
+                "MAX_HOLD_SECONDS":  hold_s,
+            },
+            "sample_size":     trade_count,
+            "start_balance":   round(start_balance, 4),
+            "end_balance":     round(end_balance, 4),
+            "pnl":             round(pnl, 4),
+            "pnl_pct":         round((pnl / start_balance) * 100, 4) if start_balance else 0,
+        }
+
+        # Load existing log or start fresh
+        results = []
+        if CONFIG_TEST_LOG_PATH.exists():
+            try:
+                with open(CONFIG_TEST_LOG_PATH, "r") as f:
+                    results = json.load(f)
+            except Exception:
+                results = []
+
+        results.append(record)
+
+        try:
+            with open(CONFIG_TEST_LOG_PATH, "w") as f:
+                json.dump(results, f, indent=2)
+            print(
+                f"[CONFIG TEST] Result logged — config {self._config_index + 1}/{len(TRADING_CONFIGS)} | "
+                f"PnL ${pnl:+.2f} ({record['pnl_pct']:+.2f}%) over {trade_count} trades."
+            )
+        except Exception as e:
+            print(f"[CONFIG TEST] Warning: Could not write log: {e}")
+
+
+    """
+    Method Name:
+        _rotate_config
+
+    Parameters:
+        None
+
+    Return:
+        None
+
+    Method Description:
+        Called when trade_count reaches SAMPLE_SIZE.
+
+        1. Snapshots current PnL and logs the result to JSON.
+        2. Resets the portfolio and trade counter.
+        3. Advances _config_index to the next config.
+        4. Applies the new config, or prints a completion summary
+           and exits if all configs have been tested.
+    """
+    def _rotate_config(self):
+        start_balance = self.initialBalance
+        end_balance   = self.getPortfolioValue()
+        pnl           = end_balance - start_balance
+        idx           = self._config_index
+
+        print(
+            f"\n{'='*60}\n"
+            f"[CONFIG TEST] Config {idx + 1}/{len(TRADING_CONFIGS)} completed {SAMPLE_SIZE} trades.\n"
+            f"  Start: ${start_balance:.2f} | End: ${end_balance:.2f} | "
+            f"PnL: ${pnl:+.2f}\n"
+            f"{'='*60}"
+        )
+
+        self._log_config_result(
+            pnl=pnl,
+            trade_count=self.trade_count,
+            start_balance=start_balance,
+            end_balance=end_balance,
+        )
+
+        # Advance to the next config
+        self._config_index += 1
+        self.trade_count = 0
+
+        if self._config_index >= len(TRADING_CONFIGS):
+            self._print_test_summary()
+            print("[CONFIG TEST] All configurations tested. Shutting down.")
+            self.close()
+            raise SystemExit(0)
+
+        # Reset portfolio and start the next config
+        self.resetPortfolio(newBalance=self.initialBalance)
+        self._apply_config(self._config_index)
+
+
+    """
+    Method Name:
+        _print_test_summary
+
+    Parameters:
+        None
+
+    Return:
+        None
+
+    Method Description:
+        Reads config_test_results.json and prints a ranked summary
+        table of all completed configuration runs sorted by PnL.
+    """
+    def _print_test_summary(self):
+        print(f"\n{'='*60}")
+        print("[CONFIG TEST] ===== FINAL RESULTS SUMMARY =====")
+        if not CONFIG_TEST_LOG_PATH.exists():
+            print("  No results log found.")
+            return
+
+        try:
+            with open(CONFIG_TEST_LOG_PATH, "r") as f:
+                results = json.load(f)
+        except Exception as e:
+            print(f"  Could not read results: {e}")
+            return
+
+        sorted_results = sorted(results, key=lambda r: r["pnl"], reverse=True)
+        p = results[0]["parameters"] if results else {}
+        print(f"  {'Rank':<5} {'#':<6} {'Risk':>6} {'TP%':>6} {'Split':>6} {'TS%':>6} {'SL%':>6} {'Hold':>6} {'PnL':>10} {'PnL%':>8}")
+        print(f"  {'-'*75}")
+        for i, r in enumerate(sorted_results, 1):
+            p = r["parameters"]
+            print(
+                f"  {i:<5} {r['config_index']+1:<6} "
+                f"{p['RISK_PER_TRADE']:>6.2f} "
+                f"{p['TAKE_PROFIT_PCT']:>6.2f} "
+                f"{p['TAKE_PROFIT_SPLIT']:>6.2f} "
+                f"{p['TRAILING_STOP_PCT']:>6.2f} "
+                f"{p['STOP_LOSS_PCT']:>6.2f} "
+                f"{p['MAX_HOLD_SECONDS']:>6} "
+                f"${r['pnl']:>+9.2f} "
+                f"{r['pnl_pct']:>+7.2f}%"
+            )
+        print(f"{'='*60}\n")
 
 
 
@@ -1189,6 +1469,18 @@ class PaperAccount:
             f"---------------------------------------------------------------------------------------------------------------------------"
         )
 
+        # -----------------------------------------------------------------------
+        # Trade counter — increment on every partial sell event as well
+        # -----------------------------------------------------------------------
+        self.trade_count += 1
+        print(
+            f"  [TRADE COUNT] {self.trade_count}/{SAMPLE_SIZE if CONFIG_TEST_MODE else '∞'} "
+            f"{'(config test mode)' if CONFIG_TEST_MODE else ''}"
+        )
+
+        if CONFIG_TEST_MODE and self.trade_count >= SAMPLE_SIZE:
+            self._rotate_config()
+
 
 
 
@@ -1266,6 +1558,18 @@ class PaperAccount:
 
         )
 
+        # -----------------------------------------------------------------------
+        # Trade counter — increment on every completed (full) sell
+        # -----------------------------------------------------------------------
+        self.trade_count += 1
+        print(
+            f"  [TRADE COUNT] {self.trade_count}/{SAMPLE_SIZE if CONFIG_TEST_MODE else '∞'} "
+            f"{'(config test mode)' if CONFIG_TEST_MODE else ''}"
+        )
+
+        if CONFIG_TEST_MODE and self.trade_count >= SAMPLE_SIZE:
+            self._rotate_config()
+
 
 
     # -----------------------------------------------------------------------
@@ -1293,7 +1597,14 @@ class PaperAccount:
         6. Sleeps for POLL_INTERVAL_SECONDS before repeating.
     """
     def run(self):
-        print(f"\nPaper Trading Engine started. Polling every {POLL_INTERVAL_SECONDS}s.\n")
+        mode_label = "CONFIG TEST MODE" if CONFIG_TEST_MODE else "LIVE MODE"
+        print(f"\nPaper Trading Engine started [{mode_label}]. Polling every {POLL_INTERVAL_SECONDS}s.\n")
+        if CONFIG_TEST_MODE:
+            print(
+                f"  Configs to test: {len(TRADING_CONFIGS)} | "
+                f"Sample size per config: {SAMPLE_SIZE} trades\n"
+                f"  Results log: {CONFIG_TEST_LOG_PATH}\n"
+            )
         try:
             while True:
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] --- Poll ---")
@@ -1320,17 +1631,34 @@ class PaperAccount:
                 # Portfolio snapshot
                 portfolio_val = self.getPortfolioValue()
                 pnl = self.getPnL()
-                print(
-                    f"  Portfolio: ${portfolio_val:.2f} | "
-                    f"Cash: ${self.balance:.2f} | "
-                    f"PnL: ${pnl:+.2f} | "
-                    f"Open positions: {len(self.positions)}\n"
-                )
+
+                if CONFIG_TEST_MODE:
+                    risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s = TRADING_CONFIGS[self._config_index]
+                    print(
+                        f"  [Config {self._config_index + 1}/{len(TRADING_CONFIGS)}] "
+                        f"risk={risk} tp={tp_pct} split={tp_split} ts={ts_pct} sl={sl_pct} hold={hold_s}s | "
+                        f"Trades: {self.trade_count}/{SAMPLE_SIZE} | "
+                        f"Portfolio: ${portfolio_val:.2f} | "
+                        f"Cash: ${self.balance:.2f} | "
+                        f"PnL: ${pnl:+.2f} | "
+                        f"Open: {len(self.positions)}\n"
+                    )
+                else:
+                    print(
+                        f"  Portfolio: ${portfolio_val:.2f} | "
+                        f"Cash: ${self.balance:.2f} | "
+                        f"PnL: ${pnl:+.2f} | "
+                        f"Trades: {self.trade_count} | "
+                        f"Open positions: {len(self.positions)}\n"
+                    )
 
                 time.sleep(POLL_INTERVAL_SECONDS)
 
         except KeyboardInterrupt:
+
             print("\nPaper Trading Engine shutting down...")
+            if CONFIG_TEST_MODE:
+                self._print_test_summary()
             self.close()
 
 
@@ -1357,14 +1685,17 @@ class PaperAccount:
         total = self.balance
         if not self.positions:
             return total
+        
         open_mints = list(self.positions.keys())
         prices = self._get_price(open_mints)
+
         for token_mint, pos in self.positions.items():
             price = prices.get(token_mint)
             if price is None:
                 # Fall back to entry_price so portfolio value is never understated
                 price = pos["entry_price"]
             total += pos["amount"] * price
+
         return total
 
 
