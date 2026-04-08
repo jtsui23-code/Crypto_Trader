@@ -60,48 +60,43 @@ MAX_HOLD_SECONDS = 70  # 3 minutes
 # Set CONFIG_TEST_MODE = False to run indefinitely with the defaults above.
 # ---------------------------------------------------------------------------
 
-CONFIG_TEST_MODE = False  # <-- Toggle this flag to enable/disable config testing
+CONFIG_TEST_MODE = True  # <-- Toggle this flag to enable/disable config testing
 
 # Number of completed sell trades required before rotating to the next config.
 SAMPLE_SIZE = 100
 
 # ---------------------------------------------------------------------------
 # Parameter grids — add/remove values freely.
-# Every combination is generated automatically via itertools.product.
+# Every combination is seeded into the config_test_runs table in Neon on
+# first run, then the bot queries for the next untested row (pnl IS NULL).
+# Counting by 3 to keep the total combination count manageable.
 # Order: [RISK_PER_TRADE, TAKE_PROFIT_PCT, TAKE_PROFIT_SPLIT,
 #         TRAILING_STOP_PCT, STOP_LOSS_PCT, MAX_HOLD_SECONDS]
 # ---------------------------------------------------------------------------
 _PARAM_GRID = (
-    # RISK_PER_TRADE — 3% to 10%
-    [round(x * 0.01, 2) for x in range(3, 11)],
-    # Result: [0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1]
+    # RISK_PER_TRADE — 3% to 10%, step 3
+    [round(x * 0.01, 2) for x in range(3, 11, 3)],
+    # Result: [0.03, 0.06, 0.09]
 
-    # TAKE_PROFIT_PCT — 10% to 50%
-    [round(x * 0.01, 2) for x in range(10, 51)],
-    # Result: [0.1, 0.11, 0.12, ..., 0.49, 0.5]
+    # TAKE_PROFIT_PCT — 10% to 49%, step 3
+    [round(x * 0.01, 2) for x in range(10, 50, 3)],
+    # Result: [0.1, 0.13, 0.16, 0.19, 0.22, 0.25, 0.28, 0.31, 0.34, 0.37, 0.4, 0.43, 0.46, 0.49]
 
-    # TAKE_PROFIT_SPLIT — 20% to 78%
-    [round(x * 0.01, 2) for x in range(20, 79)],
-    # Result: [0.2, 0.51, 0.52, ..., 0.78]
+    # TAKE_PROFIT_SPLIT — 20% to 77%, step 3
+    [round(x * 0.01, 2) for x in range(20, 78, 3)],
+    # Result: [0.2, 0.23, 0.26, ..., 0.77]
 
-    # TRAILING_STOP_PCT — 20% to 50%
-    [round(x * 0.01, 2) for x in range(20, 51)],
-    # Result: [0.2, 0.21, 0.22, ..., 0.5]
+    # TRAILING_STOP_PCT — 20% to 50%, step 3
+    [round(x * 0.01, 2) for x in range(20, 51, 3)],
+    # Result: [0.2, 0.23, 0.26, ..., 0.5]
 
-    # STOP_LOSS_PCT — 10% to 40%
-    [round(x * 0.01, 2) for x in range(10, 41)],
-    # Result: [0.1, 0.11, 0.12, ..., 0.4]
+    # STOP_LOSS_PCT — 10% to 40%, step 3
+    [round(x * 0.01, 2) for x in range(10, 41, 3)],
+    # Result: [0.1, 0.13, 0.16, ..., 0.4]
 
     # MAX_HOLD_SECONDS — maximum hold time before forced exit
     [60, 120, 180],
 )
-
-# Auto-generate every permutation — each entry is a plain tuple:
-# (risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s)
-TRADING_CONFIGS = list(itertools.product(*_PARAM_GRID))
-
-# Path where JSON results are written
-CONFIG_TEST_LOG_PATH = Path("config_test_results.json")
 
 
 """
@@ -247,13 +242,20 @@ class PaperAccount:
         # Counts completed sell events (full or partial) in the current config run.
         self.trade_count: int = 0
 
-        # Index into TRADING_CONFIGS for the currently active config.
-        # Only relevant when CONFIG_TEST_MODE is True.
-        self._config_index: int = 0
+        # ID of the config_test_runs row currently being tested.
+        # None when CONFIG_TEST_MODE is False.
+        self._current_config_id:  Optional[int]  = None
+        self._current_config_row: Optional[dict] = None
 
-        # Apply the first config immediately if testing mode is active.
+        # Seed the config table and load the first untested config from Neon.
         if CONFIG_TEST_MODE:
-            self._apply_config(self._config_index)
+            self._seed_config_table()
+            next_config = self._fetch_next_config()
+            if next_config is None:
+                print("[CONFIG TEST] All configurations already tested. Nothing to run.")
+                self.close()
+                raise SystemExit(0)
+            self._apply_config_row(next_config)
 
         if reset:
             self.resetPortfolio()
@@ -296,8 +298,9 @@ class PaperAccount:
                         print(f"Error: Expected list in {file_path.name}, got {type(data)}")
                         return []
 
-                    print(f"Loaded {len(data)} whale targets.")
-                    return data
+                    clean = [w.strip() for w in data if isinstance(w, str) and w.strip()]
+                    print(f"Loaded {len(clean)} whale targets.")
+                    return clean
             else:
                 print(f"Warning: {file_path} not found.")
                 return []
@@ -381,15 +384,69 @@ class PaperAccount:
         strategy parameters without restarting.
     """
     def _apply_config(self, index: int):
+        """
+        Method Name:
+            _apply_config
+
+        Parameters:
+            index (int):
+                Legacy parameter kept for compatibility with __init__
+                during the initial seed call. Applies the config stored
+                in self._current_config_row.
+
+        Return:
+            None
+
+        Method Description:
+            Thin wrapper that delegates to _apply_config_row using the
+            already-loaded _current_config_row. Called from __init__ after
+            _fetch_next_config has populated _current_config_row.
+        """
+        if hasattr(self, "_current_config_row") and self._current_config_row:
+            self._apply_config_row(self._current_config_row)
+
+
+    def _apply_config_row(self, row: dict):
+        """
+        Method Name:
+            _apply_config_row
+
+        Parameters:
+            row (dict):
+                A config_test_runs row dict with keys:
+                id, risk_per_trade, take_profit_pct, take_profit_split,
+                trailing_stop_pct, stop_loss_pct, max_hold_seconds,
+                tested_count, total_count.
+
+        Return:
+            None
+
+        Method Description:
+            Overwrites the module-level trading constants with values from
+            the supplied DB row and updates _current_config_id /
+            _current_config_row so _log_config_result knows which row to
+            update when the run completes.
+        """
         global RISK_PER_TRADE, TAKE_PROFIT_PCT, TAKE_PROFIT_SPLIT
         global TRAILING_STOP_PCT, STOP_LOSS_PCT, MAX_HOLD_SECONDS
 
-        (RISK_PER_TRADE, TAKE_PROFIT_PCT, TAKE_PROFIT_SPLIT,
-         TRAILING_STOP_PCT, STOP_LOSS_PCT, MAX_HOLD_SECONDS) = TRADING_CONFIGS[index]
+        self._current_config_id  = row["id"]
+        self._current_config_row = row
+
+        RISK_PER_TRADE    = row["risk_per_trade"]
+        TAKE_PROFIT_PCT   = row["take_profit_pct"]
+        TAKE_PROFIT_SPLIT = row["take_profit_split"]
+        TRAILING_STOP_PCT = row["trailing_stop_pct"]
+        STOP_LOSS_PCT     = row["stop_loss_pct"]
+        MAX_HOLD_SECONDS  = row["max_hold_seconds"]
+
+        tested = self._count_tested_configs()
+        total  = self._count_total_configs()
 
         print(
             f"\n{'='*60}\n"
-            f"[CONFIG TEST] Config {index + 1}/{len(TRADING_CONFIGS)}\n"
+            f"[CONFIG TEST] Loaded config id={self._current_config_id} "
+            f"({tested}/{total} done)\n"
             f"  risk={RISK_PER_TRADE} | tp={TAKE_PROFIT_PCT} | "
             f"tp_split={TAKE_PROFIT_SPLIT} | ts={TRAILING_STOP_PCT} | "
             f"sl={STOP_LOSS_PCT} | hold={MAX_HOLD_SECONDS}s\n"
@@ -428,45 +485,56 @@ class PaperAccount:
         start_balance: float,
         end_balance: float,
     ):
-        risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s = TRADING_CONFIGS[self._config_index]
-        record = {
-            "timestamp":       datetime.now(timezone.utc).isoformat(),
-            "config_index":    self._config_index,
-            "parameters": {
-                "RISK_PER_TRADE":    risk,
-                "TAKE_PROFIT_PCT":   tp_pct,
-                "TAKE_PROFIT_SPLIT": tp_split,
-                "TRAILING_STOP_PCT": ts_pct,
-                "STOP_LOSS_PCT":     sl_pct,
-                "MAX_HOLD_SECONDS":  hold_s,
-            },
-            "sample_size":     trade_count,
-            "start_balance":   round(start_balance, 4),
-            "end_balance":     round(end_balance, 4),
-            "pnl":             round(pnl, 4),
-            "pnl_pct":         round((pnl / start_balance) * 100, 4) if start_balance else 0,
-        }
+        """
+        Method Name:
+            _log_config_result
 
-        # Load existing log or start fresh
-        results = []
-        if CONFIG_TEST_LOG_PATH.exists():
-            try:
-                with open(CONFIG_TEST_LOG_PATH, "r") as f:
-                    results = json.load(f)
-            except Exception:
-                results = []
+        Parameters:
+            pnl (float):
+                Realised PnL for this config run.
+            trade_count (int):
+                Number of completed sell trades in this run.
+            start_balance (float):
+                Portfolio balance at the start of this config run.
+            end_balance (float):
+                Portfolio balance at the end of this config run.
 
-        results.append(record)
+        Return:
+            None
+
+        Method Description:
+            Writes the completed config's PnL result back to the
+            config_test_runs row in Neon (identified by _current_config_id).
+            A row with pnl IS NOT NULL is considered fully tested and will
+            be skipped when the bot resumes after a restart.
+        """
+        if self._db_conn is None or self._current_config_id is None:
+            return
+
+        pnl_pct = round((pnl / start_balance) * 100, 4) if start_balance else 0
 
         try:
-            with open(CONFIG_TEST_LOG_PATH, "w") as f:
-                json.dump(results, f, indent=2)
+            cursor = self._db_conn.cursor()
+            cursor.execute(
+                """
+                UPDATE config_test_runs
+                SET pnl            = %s,
+                    pnl_pct        = %s,
+                    end_balance    = %s,
+                    sample_size    = %s,
+                    completed_at   = NOW()
+                WHERE id = %s
+                """,
+                (round(pnl, 4), pnl_pct, round(end_balance, 4),
+                 trade_count, self._current_config_id)
+            )
+            cursor.close()
             print(
-                f"[CONFIG TEST] Result logged — config {self._config_index + 1}/{len(TRADING_CONFIGS)} | "
-                f"PnL ${pnl:+.2f} ({record['pnl_pct']:+.2f}%) over {trade_count} trades."
+                f"[CONFIG TEST] Result saved to DB — row id={self._current_config_id} | "
+                f"PnL ${pnl:+.2f} ({pnl_pct:+.2f}%) over {trade_count} trades."
             )
         except Exception as e:
-            print(f"[CONFIG TEST] Warning: Could not write log: {e}")
+            print(f"[CONFIG TEST] Warning: Could not save result to DB: {e}")
 
 
     """
@@ -489,16 +557,39 @@ class PaperAccount:
            and exits if all configs have been tested.
     """
     def _rotate_config(self):
+        """
+        Method Name:
+            _rotate_config
+
+        Parameters:
+            None
+
+        Return:
+            None
+
+        Method Description:
+            Called when trade_count reaches SAMPLE_SIZE.
+
+            1. Snapshots current PnL and writes the result to the
+               config_test_runs row in Neon via _log_config_result.
+            2. Resets the portfolio and trade counter.
+            3. Queries for the next untested config row (pnl IS NULL)
+               ordered by id, applies it, or prints a completion summary
+               and exits if all configs have been tested.
+        """
         start_balance = self.initialBalance
         end_balance   = self.getPortfolioValue()
         pnl           = end_balance - start_balance
-        idx           = self._config_index
+
+        tested_count  = self._count_tested_configs()
+        total_count   = self._count_total_configs()
 
         print(
             f"\n{'='*60}\n"
-            f"[CONFIG TEST] Config {idx + 1}/{len(TRADING_CONFIGS)} completed {SAMPLE_SIZE} trades.\n"
+            f"[CONFIG TEST] Config id={self._current_config_id} completed {SAMPLE_SIZE} trades.\n"
             f"  Start: ${start_balance:.2f} | End: ${end_balance:.2f} | "
             f"PnL: ${pnl:+.2f}\n"
+            f"  Progress: {tested_count}/{total_count} configs done.\n"
             f"{'='*60}"
         )
 
@@ -509,19 +600,47 @@ class PaperAccount:
             end_balance=end_balance,
         )
 
-        # Advance to the next config
-        self._config_index += 1
         self.trade_count = 0
 
-        if self._config_index >= len(TRADING_CONFIGS):
+        # Load the next untested config from the DB
+        next_config = self._fetch_next_config()
+        if next_config is None:
             self._print_test_summary()
             print("[CONFIG TEST] All configurations tested. Shutting down.")
             self.close()
             raise SystemExit(0)
 
-        # Reset portfolio and start the next config
+        # Reset portfolio and apply the next config
         self.resetPortfolio(newBalance=self.initialBalance)
-        self._apply_config(self._config_index)
+        self._apply_config_row(next_config)
+
+
+    def _count_tested_configs(self) -> int:
+        """Returns the number of config_test_runs rows where pnl IS NOT NULL."""
+        if self._db_conn is None:
+            return 0
+        try:
+            cursor = self._db_conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM config_test_runs WHERE pnl IS NOT NULL")
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0] if result else 0
+        except Exception:
+            return 0
+
+
+    def _count_total_configs(self) -> int:
+        """Returns the total number of rows in config_test_runs."""
+        if self._db_conn is None:
+            return 0
+        try:
+            cursor = self._db_conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM config_test_runs")
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0] if result else 0
+        except Exception:
+            return 0
 
 
     """
@@ -539,38 +658,202 @@ class PaperAccount:
         table of all completed configuration runs sorted by PnL.
     """
     def _print_test_summary(self):
+        """
+        Method Name:
+            _print_test_summary
+
+        Parameters:
+            None
+
+        Return:
+            None
+
+        Method Description:
+            Reads all completed config rows (pnl IS NOT NULL) from
+            config_test_runs in Neon and prints a ranked summary table
+            sorted by PnL descending.
+        """
         print(f"\n{'='*60}")
         print("[CONFIG TEST] ===== FINAL RESULTS SUMMARY =====")
-        if not CONFIG_TEST_LOG_PATH.exists():
-            print("  No results log found.")
+
+        if self._db_conn is None:
+            print("  No database connection — cannot read results.")
             return
 
         try:
-            with open(CONFIG_TEST_LOG_PATH, "r") as f:
-                results = json.load(f)
+            cursor = self._db_conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, risk_per_trade, take_profit_pct, take_profit_split,
+                       trailing_stop_pct, stop_loss_pct, max_hold_seconds,
+                       pnl, pnl_pct, sample_size
+                FROM config_test_runs
+                WHERE pnl IS NOT NULL
+                ORDER BY pnl DESC
+                """
+            )
+            rows = cursor.fetchall()
+            cursor.close()
         except Exception as e:
-            print(f"  Could not read results: {e}")
+            print(f"  Could not read results from DB: {e}")
             return
 
-        sorted_results = sorted(results, key=lambda r: r["pnl"], reverse=True)
-        p = results[0]["parameters"] if results else {}
-        print(f"  {'Rank':<5} {'#':<6} {'Risk':>6} {'TP%':>6} {'Split':>6} {'TS%':>6} {'SL%':>6} {'Hold':>6} {'PnL':>10} {'PnL%':>8}")
-        print(f"  {'-'*75}")
-        for i, r in enumerate(sorted_results, 1):
-            p = r["parameters"]
+        if not rows:
+            print("  No completed configs found.")
+            return
+
+        print(
+            f"  {'Rank':<5} {'ID':<6} {'Risk':>6} {'TP%':>6} "
+            f"{'Split':>6} {'TS%':>6} {'SL%':>6} {'Hold':>6} "
+            f"{'PnL':>10} {'PnL%':>8} {'Trades':>7}"
+        )
+        print(f"  {'-'*80}")
+        for i, r in enumerate(rows, 1):
+            (cfg_id, risk, tp_pct, tp_split, ts_pct, sl_pct,
+             hold_s, pnl, pnl_pct, sample_size) = r
             print(
-                f"  {i:<5} {r['config_index']+1:<6} "
-                f"{p['RISK_PER_TRADE']:>6.2f} "
-                f"{p['TAKE_PROFIT_PCT']:>6.2f} "
-                f"{p['TAKE_PROFIT_SPLIT']:>6.2f} "
-                f"{p['TRAILING_STOP_PCT']:>6.2f} "
-                f"{p['STOP_LOSS_PCT']:>6.2f} "
-                f"{p['MAX_HOLD_SECONDS']:>6} "
-                f"${r['pnl']:>+9.2f} "
-                f"{r['pnl_pct']:>+7.2f}%"
+                f"  {i:<5} {cfg_id:<6} "
+                f"{risk:>6.2f} {tp_pct:>6.2f} {tp_split:>6.2f} "
+                f"{ts_pct:>6.2f} {sl_pct:>6.2f} {hold_s:>6} "
+                f"${pnl:>+9.2f} {pnl_pct:>+7.2f}% {sample_size:>7}"
             )
         print(f"{'='*60}\n")
 
+
+
+    def _seed_config_table(self):
+        """
+        Method Name:
+            _seed_config_table
+
+        Parameters:
+            None
+
+        Return:
+            None
+
+        Method Description:
+            Generates every permutation from _PARAM_GRID and inserts them
+            into config_test_runs using INSERT ... ON CONFLICT DO NOTHING.
+            Safe to call on every startup — already-existing rows (matched
+            on the unique constraint across all 6 param columns) are skipped,
+            so re-seeding never overwrites pnl results from completed runs.
+
+            Also creates the table if it does not yet exist.
+        """
+        if self._db_conn is None:
+            return
+
+        try:
+            cursor = self._db_conn.cursor()
+
+            # Create table if it doesn't exist yet
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS config_test_runs (
+                    id                 SERIAL PRIMARY KEY,
+                    risk_per_trade     NUMERIC(6,4) NOT NULL,
+                    take_profit_pct    NUMERIC(6,4) NOT NULL,
+                    take_profit_split  NUMERIC(6,4) NOT NULL,
+                    trailing_stop_pct  NUMERIC(6,4) NOT NULL,
+                    stop_loss_pct      NUMERIC(6,4) NOT NULL,
+                    max_hold_seconds   INTEGER       NOT NULL,
+                    pnl                NUMERIC(12,4),
+                    pnl_pct            NUMERIC(10,4),
+                    end_balance        NUMERIC(12,4),
+                    sample_size        INTEGER,
+                    created_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+                    completed_at       TIMESTAMPTZ,
+                    UNIQUE (risk_per_trade, take_profit_pct, take_profit_split,
+                            trailing_stop_pct, stop_loss_pct, max_hold_seconds)
+                )
+                """
+            )
+
+            # Generate and insert all permutations
+            all_configs = list(itertools.product(*_PARAM_GRID))
+            inserted = 0
+            for cfg in all_configs:
+                risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s = cfg
+                cursor.execute(
+                    """
+                    INSERT INTO config_test_runs
+                        (risk_per_trade, take_profit_pct, take_profit_split,
+                         trailing_stop_pct, stop_loss_pct, max_hold_seconds)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (risk_per_trade, take_profit_pct, take_profit_split,
+                                 trailing_stop_pct, stop_loss_pct, max_hold_seconds)
+                    DO NOTHING
+                    """,
+                    (risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s)
+                )
+                inserted += cursor.rowcount
+
+            cursor.close()
+            total = len(all_configs)
+            print(
+                f"[CONFIG TEST] Config table seeded — "
+                f"{inserted} new rows added, {total - inserted} already existed "
+                f"({total} total permutations)."
+            )
+
+        except Exception as e:
+            print(f"[CONFIG TEST] Error seeding config table: {e}")
+
+
+    def _fetch_next_config(self) -> Optional[dict]:
+        """
+        Method Name:
+            _fetch_next_config
+
+        Parameters:
+            None
+
+        Return:
+            dict | None:
+                The next untested config row as a dict, or None if all
+                configs have been tested (pnl is set on every row).
+
+        Method Description:
+            Queries config_test_runs for the lowest id row where pnl IS NULL,
+            indicating it has not yet been fully tested. This is how the bot
+            resumes from exactly where it left off after a restart — any row
+            without a pnl score is fair game, any row with a score is skipped.
+        """
+        if self._db_conn is None:
+            return None
+
+        try:
+            cursor = self._db_conn.cursor()
+            cursor.execute(
+                """
+                SELECT id, risk_per_trade, take_profit_pct, take_profit_split,
+                       trailing_stop_pct, stop_loss_pct, max_hold_seconds
+                FROM config_test_runs
+                WHERE pnl IS NULL
+                ORDER BY id ASC
+                LIMIT 1
+                """
+            )
+            row = cursor.fetchone()
+            cursor.close()
+
+            if row is None:
+                return None
+
+            return {
+                "id":                row[0],
+                "risk_per_trade":    float(row[1]),
+                "take_profit_pct":   float(row[2]),
+                "take_profit_split": float(row[3]),
+                "trailing_stop_pct": float(row[4]),
+                "stop_loss_pct":     float(row[5]),
+                "max_hold_seconds":  int(row[6]),
+            }
+
+        except Exception as e:
+            print(f"[CONFIG TEST] Error fetching next config: {e}")
+            return None
 
 
     # -----------------------------------------------------------------------
@@ -993,16 +1276,26 @@ class PaperAccount:
             return []
         try:
             cursor = self._db_conn.cursor()
+
+            # Normalise all target addresses (strip whitespace) so they match
+            # the on-chain pubkey strings stored by the decoder exactly.
+            clean_targets = [t.strip() for t in self.targets if t and t.strip()]
+            if not clean_targets:
+                return []
+
+            # Use IN with an explicit tuple rather than ANY(%s) to avoid
+            # psycopg2 array-casting issues that silently return zero rows.
+            placeholders = ",".join(["%s"] * len(clean_targets))
             cursor.execute(
-                """
+                f"""
                 SELECT id, amount_in, price_per_token, timestamp,
                        amount_out, owner, token_out_mint, token_in_mint
                 FROM swaps
                 WHERE id > %s
-                  AND owner = ANY(%s)
+                  AND owner IN ({placeholders})
                 ORDER BY id ASC
                 """,
-                (self._last_seen_swap_id, self.targets)
+                (self._last_seen_swap_id, *clean_targets)
             )
             rows = cursor.fetchall()
             cursor.close()
@@ -1600,10 +1893,12 @@ class PaperAccount:
         mode_label = "CONFIG TEST MODE" if CONFIG_TEST_MODE else "LIVE MODE"
         print(f"\nPaper Trading Engine started [{mode_label}]. Polling every {POLL_INTERVAL_SECONDS}s.\n")
         if CONFIG_TEST_MODE:
+            total = self._count_total_configs()
+            tested = self._count_tested_configs()
             print(
-                f"  Configs to test: {len(TRADING_CONFIGS)} | "
+                f"  Configs in DB: {total} | Already tested: {tested} | "
+                f"Remaining: {total - tested} | "
                 f"Sample size per config: {SAMPLE_SIZE} trades\n"
-                f"  Results log: {CONFIG_TEST_LOG_PATH}\n"
             )
         try:
             while True:
@@ -1633,10 +1928,13 @@ class PaperAccount:
                 pnl = self.getPnL()
 
                 if CONFIG_TEST_MODE:
-                    risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s = TRADING_CONFIGS[self._config_index]
+                    tested = self._count_tested_configs()
+                    total  = self._count_total_configs()
                     print(
-                        f"  [Config {self._config_index + 1}/{len(TRADING_CONFIGS)}] "
-                        f"risk={risk} tp={tp_pct} split={tp_split} ts={ts_pct} sl={sl_pct} hold={hold_s}s | "
+                        f"  [Config id={self._current_config_id} | "
+                        f"{tested}/{total} done] "
+                        f"risk={RISK_PER_TRADE} tp={TAKE_PROFIT_PCT} split={TAKE_PROFIT_SPLIT} "
+                        f"ts={TRAILING_STOP_PCT} sl={STOP_LOSS_PCT} hold={MAX_HOLD_SECONDS}s | "
                         f"Trades: {self.trade_count}/{SAMPLE_SIZE} | "
                         f"Portfolio: ${portfolio_val:.2f} | "
                         f"Cash: ${self.balance:.2f} | "
@@ -1773,5 +2071,7 @@ class PaperAccount:
 
 
 if __name__ == "__main__":
-    account = PaperAccount(initialBalance=10000.0, reset=True)
+    # reset=False — persisted balance, positions and swap cursor are restored
+    # on restart.  Pass reset=True only when you deliberately want a clean slate.
+    account = PaperAccount(initialBalance=10000.0, reset=False)
     account.run()
