@@ -5,6 +5,7 @@ trader/.env
 *$py.class
 
 */.env
+.env
 
 .DS_Store
 Thumbs.db
