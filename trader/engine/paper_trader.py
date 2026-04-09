@@ -218,7 +218,7 @@ class PaperAccount:
         account state and open positions, and sets the baseline swap ID
         so only new swaps are processed.
     """
-    def __init__(self, initialBalance: float = 10000.0, reset:bool = False):
+    def __init__(self, initialBalance: float = 10000.0, reset:bool = False, generate_config: bool = True):
         self.initialBalance = initialBalance
         self.balance = initialBalance
         self.positions: Dict[str, dict] = {}
@@ -249,7 +249,7 @@ class PaperAccount:
 
         # Seed the config table and load the first untested config from Neon.
         if CONFIG_TEST_MODE:
-            self._seed_config_table()
+            self._seed_config_table(seed=generate_config)
             next_config = self._fetch_next_config()
             if next_config is None:
                 print("[CONFIG TEST] All configurations already tested. Nothing to run.")
@@ -721,13 +721,14 @@ class PaperAccount:
 
 
 
-    def _seed_config_table(self):
+    def _seed_config_table(self, seed:bool = True):
         """
         Method Name:
             _seed_config_table
 
         Parameters:
-            None
+            seed: Bool - Decides if needing to generate a new config table. This is skipped once a config table is 
+                         genearted through setting seed to False.
 
         Return:
             None
@@ -745,57 +746,59 @@ class PaperAccount:
             return
 
         try:
-            cursor = self._db_conn.cursor()
+            if seed:
+                print("seeding")
+                cursor = self._db_conn.cursor()
 
-            # Create table if it doesn't exist yet
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS config_test_runs (
-                    id                 SERIAL PRIMARY KEY,
-                    risk_per_trade     NUMERIC(6,4) NOT NULL,
-                    take_profit_pct    NUMERIC(6,4) NOT NULL,
-                    take_profit_split  NUMERIC(6,4) NOT NULL,
-                    trailing_stop_pct  NUMERIC(6,4) NOT NULL,
-                    stop_loss_pct      NUMERIC(6,4) NOT NULL,
-                    max_hold_seconds   INTEGER       NOT NULL,
-                    pnl                NUMERIC(12,4),
-                    pnl_pct            NUMERIC(10,4),
-                    end_balance        NUMERIC(12,4),
-                    sample_size        INTEGER,
-                    created_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-                    completed_at       TIMESTAMPTZ,
-                    UNIQUE (risk_per_trade, take_profit_pct, take_profit_split,
-                            trailing_stop_pct, stop_loss_pct, max_hold_seconds)
-                )
-                """
-            )
-
-            # Generate and insert all permutations
-            all_configs = list(itertools.product(*_PARAM_GRID))
-            inserted = 0
-            for cfg in all_configs:
-                risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s = cfg
+                # Create table if it doesn't exist yet
                 cursor.execute(
                     """
-                    INSERT INTO config_test_runs
-                        (risk_per_trade, take_profit_pct, take_profit_split,
-                         trailing_stop_pct, stop_loss_pct, max_hold_seconds)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ON CONFLICT (risk_per_trade, take_profit_pct, take_profit_split,
-                                 trailing_stop_pct, stop_loss_pct, max_hold_seconds)
-                    DO NOTHING
-                    """,
-                    (risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s)
+                    CREATE TABLE IF NOT EXISTS config_test_runs (
+                        id                 SERIAL PRIMARY KEY,
+                        risk_per_trade     NUMERIC(6,4) NOT NULL,
+                        take_profit_pct    NUMERIC(6,4) NOT NULL,
+                        take_profit_split  NUMERIC(6,4) NOT NULL,
+                        trailing_stop_pct  NUMERIC(6,4) NOT NULL,
+                        stop_loss_pct      NUMERIC(6,4) NOT NULL,
+                        max_hold_seconds   INTEGER       NOT NULL,
+                        pnl                NUMERIC(12,4),
+                        pnl_pct            NUMERIC(10,4),
+                        end_balance        NUMERIC(12,4),
+                        sample_size        INTEGER,
+                        created_at         TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+                        completed_at       TIMESTAMPTZ,
+                        UNIQUE (risk_per_trade, take_profit_pct, take_profit_split,
+                                trailing_stop_pct, stop_loss_pct, max_hold_seconds)
+                    )
+                    """
                 )
-                inserted += cursor.rowcount
 
-            cursor.close()
-            total = len(all_configs)
-            print(
-                f"[CONFIG TEST] Config table seeded — "
-                f"{inserted} new rows added, {total - inserted} already existed "
-                f"({total} total permutations)."
-            )
+                # Generate and insert all permutations
+                all_configs = list(itertools.product(*_PARAM_GRID))
+                inserted = 0
+                for cfg in all_configs:
+                    risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s = cfg
+                    cursor.execute(
+                        """
+                        INSERT INTO config_test_runs
+                            (risk_per_trade, take_profit_pct, take_profit_split,
+                            trailing_stop_pct, stop_loss_pct, max_hold_seconds)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        ON CONFLICT (risk_per_trade, take_profit_pct, take_profit_split,
+                                    trailing_stop_pct, stop_loss_pct, max_hold_seconds)
+                        DO NOTHING
+                        """,
+                        (risk, tp_pct, tp_split, ts_pct, sl_pct, hold_s)
+                    )
+                    inserted += cursor.rowcount
+
+                cursor.close()
+                total = len(all_configs)
+                print(
+                    f"[CONFIG TEST] Config table seeded — "
+                    f"{inserted} new rows added, {total - inserted} already existed "
+                    f"({total} total permutations)."
+                )
 
         except Exception as e:
             print(f"[CONFIG TEST] Error seeding config table: {e}")
@@ -2073,5 +2076,5 @@ class PaperAccount:
 if __name__ == "__main__":
     # reset=False — persisted balance, positions and swap cursor are restored
     # on restart.  Pass reset=True only when you deliberately want a clean slate.
-    account = PaperAccount(initialBalance=10000.0, reset=False)
+    account = PaperAccount(initialBalance=10000.0, reset=False, generate_config=False)
     account.run()
