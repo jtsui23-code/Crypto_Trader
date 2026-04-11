@@ -31,23 +31,82 @@ def get_db_connection():
     
 @app.get("/api/traders")
 async def get_targeted_wallets():
-    # Use the absolute path as it exists inside the Docker container
-    file_path = "/app/trader/data/whales.json" 
+    """
+    Fetches performance metrics for all tracked wallets from the 
+    paper_trader_performance table to populate frontend charts.
+    """
+    conn = get_db_connection()
+    if not conn:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+    
     try:
-        if not os.path.exists(file_path):
-            print(f"ERROR: File not found at {file_path}")
-            raise HTTPException(status_code=404, detail="whales.json file missing on server")
-            
-        with open(file_path, "r") as f:
-            data = json.load(f)
-        
+        cur = conn.cursor()
+        # Query the specific performance metrics required by the frontend charts
+        query = """
+            SELECT 
+                wallet_address, 
+                winning_trades, 
+                losing_trades, 
+                best_trade_pnl, 
+                worst_trade_pnl, 
+                avg_pnl_per_trade,
+                total_realised_pnl
+            FROM paper_trader_performance
+            ORDER BY total_realised_pnl DESC
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
         return [
-            {"id": str(i), "name": address, "record": "Tracked"} 
-            for i, address in enumerate(data.get("wallets", []))
+            {
+                "id": r[0], # wallet_address used as ID
+                "name": r[0],
+                "record": f"${r[6]:.2f} Total PnL",
+                "winning_trades": r[1],
+                "losing_trades": r[2],
+                "best_trade_pnl": float(r[3]),
+                "worst_trade_pnl": float(r[4]),
+                "avg_pnl_per_trade": float(r[5]),
+                "total_pnl": float(r[6])
+            } for r in rows
         ]
     except Exception as e:
-        print(f"Error reading whales: {e}")
+        if conn: conn.close()
+        print(f"Error fetching performance data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analytics/summary")
+async def get_analytics_summary():
+    conn = get_db_connection()
+    if not conn: return {"error": "DB connection failed"}
+    try:
+        cur = conn.cursor()
+        
+        # Get Account Balance
+        cur.execute("SELECT balance, initial_balance FROM paper_account LIMIT 1")
+        acc = cur.fetchone()
+        account_data = {"balance": float(acc[0]), "initial": float(acc[1])} if acc else {"balance": 0, "initial": 0}
+        
+        # Get Exit Reasons
+        cur.execute("SELECT sell_reason, COUNT(*) FROM paper_trades WHERE side = 'SELL' GROUP BY sell_reason")
+        reasons = [{"label": r[0] or "Unknown", "value": r[1]} for r in cur.fetchall()]
+        
+        # Get Exposure
+        cur.execute("SELECT token_symbol, SUM(cost_basis) FROM paper_positions GROUP BY token_symbol")
+        exposure = [{"label": e[0], "value": float(e[1])} for e in cur.fetchall()]
+        
+        cur.close()
+        conn.close()
+        
+        return {
+            "account": account_data,
+            "exit_reasons": reasons,
+            "exposure": exposure
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/api/swaps/{wallet_address}")
 async def get_wallet_history(wallet_address: str):
