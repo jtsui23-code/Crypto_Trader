@@ -8,7 +8,6 @@ import { CoinDetailView } from './components/CoinDetailView';
 import { TraderListItem } from './components/TraderListItem';
 import { TraderDetailView } from './components/TraderDetailView';
 
-// New Component Integration
 import { AnalyticsView } from './components/AnalyticsView';
 
 interface Coin {
