@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 import matplotlib
 import numpy as np
@@ -10,11 +11,13 @@ from datetime import datetime, time
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error
 import time
+from tensorflow.keras.models import load_model
 
 # Global variable to control quiet mode 
 QUIET = False
-UPDATE_TIME_S = 600
+UPDATE_TIME_S = 3600
 
+MODEL_PATH = "/app/trader/lstm/solana_lstm_model.keras"
 
 # ---------------------------------------------------------------------------
 # TensorFlow / Keras import guard
@@ -89,8 +92,27 @@ Function Description:
     a DatetimeIndex and sorts ascending so the data is ready for
     sequential modelling.
 """
-def fetch_sol_prices(days: int = DAYS) -> pd.DataFrame:
+DATA_CACHE_PATH = "/app/trader/lstm/solana_daily_cache.csv"
 
+def fetch_sol_prices(days: int = DAYS) -> pd.DataFrame:
+    # 1. Check if we have a recent cache (less than 6 hours old)
+    if  os.path.exists(DATA_CACHE_PATH):
+        cache_age_seconds = time.time() - os.path.getmtime(DATA_CACHE_PATH)
+        if cache_age_seconds < (6 * 3600): 
+            if(not QUIET):
+                print("[*] Loading historical data from local cache...")
+            
+            # Load and return the cached dataframe
+            df = pd.read_csv(DATA_CACHE_PATH, index_col="date", parse_dates=True)
+            
+            if(not QUIET):
+                print(
+                    f"    -> {len(df)} data points  |  "
+                    f"{df.index[0].date()} -> {df.index[-1].date()}"
+                )
+            return df
+
+    # 2. Otherwise, fetch fresh data from CoinGecko
     if(not QUIET):
         print(f"[*] Fetching {days}-day SOL/USD history from CoinGecko ...")
 
@@ -109,13 +131,43 @@ def fetch_sol_prices(days: int = DAYS) -> pd.DataFrame:
     df["date"] = pd.to_datetime(df["timestamp"], unit="ms")
     df = df.set_index("date")[["price"]].sort_index()
 
+    # 3. Save the newly fetched data to the local cache
+    df.to_csv(DATA_CACHE_PATH)
+
     if(not QUIET):
         print(
             f"    -> {len(df)} data points  |  "
             f"{df.index[0].date()} -> {df.index[-1].date()}"
         )
+        
     return df
 
+def fetch_live_sol_price() -> float:
+    """Fetches the real-time SOL price from Jupiter (with DexScreener fallback)."""
+    mint = "So11111111111111111111111111111111111111112"
+    
+    # 1. Try Jupiter
+    try:
+        resp = requests.get(f"https://api.jup.ag/price/v3?ids={mint}", timeout=5)
+        if resp.status_code == 200:
+            data = resp.json().get("data", {})
+            if mint in data and data[mint]:
+                return float(data[mint]["price"])
+    except Exception:
+        pass
+
+    # 2. Try DexScreener fallback
+    try:
+        resp = requests.get(f"https://api.dexscreener.com/latest/dex/tokens/{mint}", timeout=5)
+        if resp.status_code == 200:
+            pairs = resp.json().get("pairs") or []
+            if pairs:
+                best = max(pairs, key=lambda p: float(p.get("liquidity", {}).get("usd", 0) or 0))
+                return float(best["priceUsd"])
+    except Exception:
+        pass
+        
+    return None
 
 # ---------------------------------------------------------------------------
 # Sequence construction
@@ -456,6 +508,17 @@ def main():
 
     df = fetch_sol_prices()
 
+    live_price = fetch_live_sol_price()
+    if live_price is not None:
+        # Get today's date midnight UTC 
+        today = pd.Timestamp.now("UTC").tz_localize(None).normalize()     
+
+        # Overwrite or append the absolute latest price to the dataframe
+        df.loc[today, "price"] = live_price
+        
+        if not QUIET:
+            print(f"[*] Injected live price: ${live_price:.2f} for current bar")
+
     # -----------------------------------------------------------------------
     # 2. Scale prices to [0, 1] -- required for stable LSTM gradient flow
     # -----------------------------------------------------------------------
@@ -485,29 +548,28 @@ def main():
     # 4. Train the LSTM
     # -----------------------------------------------------------------------
 
-    if(not QUIET):
-        print("[*] Training LSTM ...")
-
-    model = build_model(SEQ_LEN)
-
-    if(not QUIET):
-        model.summary()
-
-    # Stop early when validation loss stops improving to prevent overfitting
-    early_stop = EarlyStopping(
-        monitor="val_loss",
-        patience=10,
-        restore_best_weights=True,
-    )
-
-    model.fit(
-        X_train, y_train,
-        epochs=EPOCHS,
-        batch_size=BATCH_SIZE,
-        validation_split=0.10,   # hold out 10% of training data for val_loss
-        callbacks=[early_stop],
-        verbose=0 if QUIET else 1,
-    )
+    if os.path.exists(MODEL_PATH):
+        if not QUIET:
+            print("[*] Loading cached model from disk...")
+        model = load_model(MODEL_PATH)
+        
+        #model.fit(X_train, y_train, epochs=2, batch_size=BATCH_SIZE, verbose=0)
+    else:
+        if not QUIET:
+            print("[*] Training new LSTM from scratch...")
+        model = build_model(SEQ_LEN)
+        
+        early_stop = EarlyStopping(monitor="val_loss", patience=10, restore_best_weights=True)
+        model.fit(
+            X_train, y_train,
+            epochs=EPOCHS,
+            batch_size=BATCH_SIZE,
+            validation_split=0.10,
+            callbacks=[early_stop],
+            verbose=0 if QUIET else 1,
+        )
+        # Cache the model for the next run
+        model.save(MODEL_PATH)
 
     # -----------------------------------------------------------------------
     # 5. Evaluate on the held-out test set
