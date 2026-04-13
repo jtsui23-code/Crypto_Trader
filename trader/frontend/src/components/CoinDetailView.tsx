@@ -1,4 +1,4 @@
-import { Box, Typography, Divider } from '@mui/material';
+import { Box, Typography, Divider, Paper } from '@mui/material';
 
 interface Coin {
   id: string;
@@ -14,7 +14,7 @@ export const CoinDetailView = ({ coin }: { coin: Coin | null | undefined }) => {
   if (!coin) {
     return (
       <Box sx={{ flex: 1, p: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant="h5" color="textSecondary">Select a position</Typography>
+        <Typography variant="h5">Select a position</Typography>
       </Box>
     );
   }
@@ -22,34 +22,34 @@ export const CoinDetailView = ({ coin }: { coin: Coin | null | undefined }) => {
   return (
     <Box sx={{ flex: 1, p: 4 }}>
       <Typography variant="h4" sx={{ color: '#4ade80', mb: 1 }}>{coin.symbol}</Typography>
-      <Typography variant="caption" sx={{ color: 'gray', display: 'block', mb: 3, fontFamily: 'monospace' }}>
+      <Typography variant="caption" sx={{ display: 'block', mb: 3, fontFamily: 'monospace' }}>
         Mint: {coin.id}
       </Typography>
 
-      <Divider sx={{ mb: 4, bgcolor: '#333' }} />
+      <Divider sx={{ mb: 4 }} />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 3 }}>
-        <Box sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 2, border: '1px solid #333' }}>
-          <Typography variant="overline" color="gray">Holdings</Typography>
+        <Paper variant="outlined" sx={{ p: 2, border: '1px solid #333' }}>
+          <Typography variant="overline">Holdings</Typography>
           <Typography variant="h6">{coin.amount.toLocaleString()}</Typography>
-        </Box>
-        <Box sx={{ p: 2, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 2, border: '1px solid #333' }}>
-          <Typography variant="overline" color="gray">Cost Basis</Typography>
+        </Paper>
+        <Paper variant="outlined" sx={{ p: 2, border: '1px solid #333' }}>
+          <Typography variant="overline">Cost Basis</Typography>
           <Typography variant="h6">${coin.cost_basis.toFixed(2)}</Typography>
-        </Box>
+        </Paper>
       </Box>
 
-      <Box sx={{ p: 2, mb: 2, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 2, border: '1px solid #333' }}>
-        <Typography variant="overline" color="gray">Entry Price</Typography>
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, border: '1px solid #333' }}>
+        <Typography variant="overline">Entry Price</Typography>
         <Typography variant="h6">${coin.entry_price.toFixed(8)}</Typography>
-      </Box>
+      </Paper>
 
-      <Box sx={{ p: 2, bgcolor: 'rgba(32, 141, 209, 0.1)', borderRadius: 2, border: '1px solid #208dd1' }}>
-        <Typography variant="overline" sx={{ color: '#208dd1' }}>Source Whale</Typography>
+      <Paper variant="outlined" sx={{ p: 2, border: '1px solid #333' }}>
+        <Typography variant="overline" sx={{ color: '1px solid #333' }}>Source Whale</Typography>
         <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
           {coin.wallet_address}
         </Typography>
-      </Box>
+      </Paper>
     </Box>
   );
 };

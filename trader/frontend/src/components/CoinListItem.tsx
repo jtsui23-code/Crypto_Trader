@@ -7,8 +7,9 @@ interface CoinListItemProps {
   onSelect: () => void;
 }
 
+// CoinListItem component for displaying individual coin positions in the sidebar list
 export const CoinListItem = ({ symbol, entry_price, isSelected, onSelect }: CoinListItemProps) => (
-  <ListItem disablePadding sx={{ borderBottom: '1px solid #222' }}>
+  <ListItem disablePadding sx={{ borderBottom: '1px solid #333' }}>
     <ListItemButton 
       onClick={onSelect} 
       selected={isSelected}
@@ -19,8 +20,13 @@ export const CoinListItem = ({ symbol, entry_price, isSelected, onSelect }: Coin
       }}
     >
       <ListItemAvatar>
-        <Avatar sx={{ border: '1px solid #fff', bgcolor: 'transparent', fontSize: '0.8rem' }}>
-          {symbol.substring(0, 3)}
+        <Avatar sx={{ 
+          border: '1px solid #333', 
+          bgcolor: 'background.paper', 
+          color: '#fff',
+          fontSize: '0.8rem' 
+        }}>
+          {symbol.substring(0, 3).toUpperCase()}
         </Avatar>
       </ListItemAvatar>
       <ListItemText 

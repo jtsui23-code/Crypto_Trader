@@ -1,12 +1,20 @@
+import argparse
 import sys
+import matplotlib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import requests
-from datetime import datetime
+from datetime import datetime, time
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error
+import time
+
+# Global variable to control quiet mode 
+QUIET = False
+UPDATE_TIME_S = 600
+
 
 # ---------------------------------------------------------------------------
 # TensorFlow / Keras import guard
@@ -16,7 +24,7 @@ from sklearn.metrics import mean_absolute_error
 try:
     import tensorflow as tf
     from tensorflow.keras.models import Sequential
-    from tensorflow.keras.layers import LSTM, Dense, Dropout
+    from tensorflow.keras.layers import LSTM, Dense, Dropout, Input
     from tensorflow.keras.callbacks import EarlyStopping
 except ImportError:
     sys.exit("TensorFlow not found. Install with:  pip install tensorflow")
@@ -82,7 +90,9 @@ Function Description:
     sequential modelling.
 """
 def fetch_sol_prices(days: int = DAYS) -> pd.DataFrame:
-    print(f"[*] Fetching {days}-day SOL/USD history from CoinGecko ...")
+
+    if(not QUIET):
+        print(f"[*] Fetching {days}-day SOL/USD history from CoinGecko ...")
 
     url = (
         "https://api.coingecko.com/api/v3/coins/solana/market_chart"
@@ -99,10 +109,11 @@ def fetch_sol_prices(days: int = DAYS) -> pd.DataFrame:
     df["date"] = pd.to_datetime(df["timestamp"], unit="ms")
     df = df.set_index("date")[["price"]].sort_index()
 
-    print(
-        f"    -> {len(df)} data points  |  "
-        f"{df.index[0].date()} -> {df.index[-1].date()}"
-    )
+    if(not QUIET):
+        print(
+            f"    -> {len(df)} data points  |  "
+            f"{df.index[0].date()} -> {df.index[-1].date()}"
+        )
     return df
 
 
@@ -177,7 +188,8 @@ Function Description:
 """
 def build_model(seq_len: int) -> Sequential:
     model = Sequential([
-        LSTM(128, return_sequences=True, input_shape=(seq_len, 1)),
+        Input(shape=(seq_len, 1)),
+        LSTM(128, return_sequences=True),
         Dropout(0.20),
         LSTM(64, return_sequences=False),
         Dropout(0.20),
@@ -379,10 +391,12 @@ def plot_results(
 
     plt.tight_layout(pad=2)
 
-    out_path = "solana_lstm_forecast.png"
+    out_path = "/app/trader/lstm/solana_lstm_forecast.png"
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
-    print(f"[*] Chart saved -> {out_path}")
-    plt.show()
+
+    if(not QUIET):
+        print(f"[*] Chart saved -> {out_path}")
+        plt.show()
 
 
 # ---------------------------------------------------------------------------
@@ -416,7 +430,20 @@ Function Description:
                          signal, model MAE, and a day-by-day price table.
     9. Chart           -- calls plot_results to render and save the figure.
 """
+
 def main():
+    global QUIET
+
+    # Command-line argument parsing for quiet mode 
+    parser = argparse.ArgumentParser(description="Solana Price Prediction LSTM")
+    parser.add_argument("--quiet", action="store_true", help="Suppress output and UI")
+    args = parser.parse_args()
+    QUIET = args.quiet
+
+    print(f"[*] Starting prediction cycle at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    if(QUIET):
+        matplotlib.use("Agg") 
 
     # -----------------------------------------------------------------------
     # 1. Fetch historical data
@@ -446,16 +473,20 @@ def main():
     X_train, y_train = make_sequences(train_data, SEQ_LEN)
     X_test,  y_test  = make_sequences(test_data,  SEQ_LEN)
 
-    print(f"[*] Train samples: {len(X_train)}  |  Test samples: {len(X_test)}")
+    if(not QUIET):
+        print(f"[*] Train samples: {len(X_train)}  |  Test samples: {len(X_test)}")
 
     # -----------------------------------------------------------------------
     # 4. Train the LSTM
     # -----------------------------------------------------------------------
 
-    print("[*] Training LSTM ...")
+    if(not QUIET):
+        print("[*] Training LSTM ...")
 
     model = build_model(SEQ_LEN)
-    model.summary()
+
+    if(not QUIET):
+        model.summary()
 
     # Stop early when validation loss stops improving to prevent overfitting
     early_stop = EarlyStopping(
@@ -470,19 +501,20 @@ def main():
         batch_size=BATCH_SIZE,
         validation_split=0.10,   # hold out 10% of training data for val_loss
         callbacks=[early_stop],
-        verbose=1,
+        verbose=0 if QUIET else 1,
     )
 
     # -----------------------------------------------------------------------
     # 5. Evaluate on the held-out test set
     # -----------------------------------------------------------------------
 
-    pred_scaled      = model.predict(X_test)
+    pred_scaled      = model.predict(X_test, verbose =  0 if QUIET else 1)
     predictions_inv  = scaler.inverse_transform(pred_scaled).flatten()
     actual_test_inv  = scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
 
     mae = mean_absolute_error(actual_test_inv, predictions_inv)
-    print(f"\n[*] Test MAE: ${mae:.4f}")
+    if(not QUIET):
+        print(f"\n[*] Test MAE: ${mae:.4f}")
 
     # -----------------------------------------------------------------------
     # 6. Autoregressive forecast -- FORECAST_DAYS steps ahead
@@ -518,19 +550,20 @@ def main():
     current_price = df["price"].iloc[-1]
     signal        = trend_signal(current_price, forecast_prices)
 
-    print("\n" + "=" * 50)
-    print("  SOLANA LSTM TREND REPORT")
-    print("=" * 50)
-    print(f"  Current price  : ${current_price:,.2f}")
-    print(f"  {FORECAST_DAYS}-day forecast : ${forecast_prices[-1]:,.2f}")
-    print(f"  Trend signal   : {signal}")
-    print(f"  Model MAE      : ${mae:.2f}")
-    print("=" * 50)
-    print(f"\n  {'Date':<12}  {'Forecast Price':>14}")
-    print(f"  {'-' * 12}  {'-' * 14}")
-    for d, p in zip(forecast_dates, forecast_prices):
-        print(f"  {d.strftime('%Y-%m-%d'):<12}  ${p:>13,.2f}")
-    print()
+    if(not QUIET):
+        print("\n" + "=" * 50)
+        print("  SOLANA LSTM TREND REPORT")
+        print("=" * 50)
+        print(f"  Current price  : ${current_price:,.2f}")
+        print(f"  {FORECAST_DAYS}-day forecast : ${forecast_prices[-1]:,.2f}")
+        print(f"  Trend signal   : {signal}")
+        print(f"  Model MAE      : ${mae:.2f}")
+        print("=" * 50)
+        print(f"\n  {'Date':<12}  {'Forecast Price':>14}")
+        print(f"  {'-' * 12}  {'-' * 14}")
+        for d, p in zip(forecast_dates, forecast_prices):
+            print(f"  {d.strftime('%Y-%m-%d'):<12}  ${p:>13,.2f}")
+        print("\n")
 
     # -----------------------------------------------------------------------
     # 8. Render chart
@@ -546,6 +579,15 @@ def main():
         mae,
     )
 
+    print(f"[*] Prediction cycle complete. Waiting {UPDATE_TIME_S // 60} minutes...")
+
 
 if __name__ == "__main__":
-    main()
+    while True:
+        try:
+            main()
+            time.sleep(UPDATE_TIME_S)  # Wait for the specified update time before the next update
+        except Exception as e:  
+            print(f"Error: {e}")
+            print("Retrying in 5 seconds...")
+            time.sleep(5)

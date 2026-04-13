@@ -1,6 +1,6 @@
 services:
   # Frontend
-  frontend:
+  react_frontend:
     build:
       context: ./trader/frontend
       dockerfile: Dockerfile
@@ -23,7 +23,7 @@ services:
       - PYTHONPATH=/app/trader
     command: python -m engine.listener
     depends_on:
-      frontend:
+      react_frontend:
         condition: service_started
     healthcheck:
       # This checks if the process is actually running inside the container
@@ -57,5 +57,27 @@ services:
     volumes:
       - ./trader/backend:/app/trader/backend
       - ./trader/data:/app/trader/data
+      - lstm_data:/app/trader/lstm
     working_dir: /app/trader/backend
     command: ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+  
+  lstm_predictor:
+    build:
+      context: ./trader/lstm
+      dockerfile: Dockerfile
+    volumes:
+      - ./trader/lstm:/app
+      - lstm_data:/app/trader/lstm
+    environment:
+      - PYTHONPATH=/app
+    command: python lstm.py --quiet
+    stdin_open: true
+    tty: true
+
+volumes:
+  lstm_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
