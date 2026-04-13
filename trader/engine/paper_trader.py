@@ -8,6 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timezone
+import requests
 
 load_dotenv()
 
@@ -17,7 +18,7 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 
 # How often the engine polls the swaps table for new whale trades (seconds)
-POLL_INTERVAL_SECONDS = 5
+POLL_INTERVAL_SECONDS = 3
 
 # Fraction of current balance to risk on each copied trade (e.g. 0.05 = 5%)
 RISK_PER_TRADE = 0.05
@@ -60,7 +61,7 @@ MAX_HOLD_SECONDS = 70  # 3 minutes
 # Set CONFIG_TEST_MODE = False to run indefinitely with the defaults above.
 # ---------------------------------------------------------------------------
 
-CONFIG_TEST_MODE = True  # <-- Toggle this flag to enable/disable config testing
+CONFIG_TEST_MODE = False  # <-- Toggle this flag to enable/disable config testing
 
 # Number of completed sell trades required before rotating to the next config.
 SAMPLE_SIZE = 100
@@ -1218,7 +1219,13 @@ class PaperAccount:
                 (realised_pnl, realised_pnl, realised_pnl, realised_pnl,
                  realised_pnl, realised_pnl, wallet_address)
             )
+
             cursor.close()
+
+            try:
+                requests.post("http://api:8000/api/internal/trigger/traders", timeout=1)
+            except Exception as e:
+                pass
         except Exception as e:
             print(f"Error updating trader performance for {wallet_address}: {e}")
 
@@ -1560,6 +1567,18 @@ class PaperAccount:
             f"Tokens {tokens_bought:.4f} | "
             f"Balance ${self.balance:.2f}"
         )
+
+        self._broadcast_updates({
+            "symbol": token_symbol,
+            "side": "BUY",
+            "price": slipped_price,
+            "amount": tokens_bought,
+            "usd_value": amount_usd,
+            "sell_reason": None,
+            "realised_pnl": None,
+            "timestamp": now.isoformat(),
+            "wallet_address": wallet_address
+        })
         return True
 
 
@@ -1765,6 +1784,18 @@ class PaperAccount:
             f"---------------------------------------------------------------------------------------------------------------------------"
         )
 
+        self._broadcast_updates({
+            "symbol": token_symbol,
+            "side": "SELL",
+            "price": slipped_price,
+            "amount": sell_amount,
+            "usd_value": proceeds,
+            "sell_reason": reason,
+            "realised_pnl": realised_pnl,
+            "timestamp": now.isoformat(),
+            "wallet_address": wallet_address
+        })
+
         # -----------------------------------------------------------------------
         # Trade counter — increment on every partial sell event as well
         # -----------------------------------------------------------------------
@@ -1851,8 +1882,19 @@ class PaperAccount:
             f"Realised PnL ${realised_pnl:+.2f} |\n "
             f"Balance ${self.balance:.2f}\n"
             f"---------------------------------------------------------------------------------------------------------------------------"
-
         )
+
+        self._broadcast_updates({
+            "symbol": token_symbol,
+            "side": "SELL",
+            "price": slipped_price,
+            "amount": amount,
+            "usd_value": proceeds,
+            "sell_reason": reason,
+            "realised_pnl": realised_pnl,
+            "timestamp": now.isoformat(),
+            "wallet_address": wallet_address
+        })
 
         # -----------------------------------------------------------------------
         # Trade counter — increment on every completed (full) sell
@@ -2053,6 +2095,54 @@ class PaperAccount:
     def getPositions(self) -> Dict[str, dict]:
         return self.positions
 
+    """
+    Method Name:
+        _broadcast_updates
+
+    Parameters:
+        trade_event (dict):
+            A dictionary containing details of the executed trade, used to
+            broadcast updates to the FastAPI backend for real-time frontend display.
+
+    Return:
+        None
+
+    Method Description:
+        After executing a trade (buy or sell), this helper method is called to
+        broadcast the following updates to the FastAPI backend via HTTP POST:
+
+        1. The new trade event is sent to the live feed channel.
+        2. The updated account balance and initial balance are sent to the summary channel.
+        3. The updated list of open positions is sent to the positions channel.
+
+        These broadcasts enable real-time updates on the frontend dashboard without
+        requiring the frontend to poll for changes. Any exceptions during broadcasting
+        are caught and logged, but do not interrupt the trading engine's operation.
+    """
+    def _broadcast_updates(self, trade_event: dict):
+        """Helper to broadcast state changes to the FastAPI backend"""
+        try:
+            # Broadcast the new trade to live feed
+            requests.post("http://api:8000/api/internal/broadcast/live_feed", json=trade_event, timeout=1)
+            
+            # Broadcast updated account balance
+            requests.post("http://api:8000/api/internal/trigger/summary", timeout=1)
+            
+            # Broadcast updated open positions list
+            pos_list = [{
+                "id": p["token_out_mint"],
+                "symbol": p["token_symbol"],
+                "amount": p["amount"],
+                "entry_price": p["entry_price"],
+                "peak_price": p["peak_price"],
+                "cost_basis": p["cost_basis"],
+                "wallet_address": p["wallet_address"]
+            } for p in self.positions.values()]
+
+            requests.post("http://api:8000/api/internal/broadcast/positions", json={"positions": pos_list}, timeout=1)
+            
+        except Exception as e:
+            print(f"Failed to broadcast WebSocket update: {e}")
 
     """
     Method Name:
@@ -2072,6 +2162,12 @@ class PaperAccount:
             self._db_conn.close()
             print("Database connection closed.")
 
+def trigger_websocket(channel: str, data: dict):
+    try:
+        # Uses the docker-compose service name 'api'
+        requests.post(f"http://api:8000/api/internal/broadcast/{channel}", json=data)
+    except Exception as e:
+        print(f"Failed to broadcast {channel}: {e}")            
 
 if __name__ == "__main__":
     # reset=False — persisted balance, positions and swap cursor are restored
