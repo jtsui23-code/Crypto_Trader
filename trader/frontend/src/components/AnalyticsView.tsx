@@ -5,28 +5,46 @@ import { PieChart } from '@mui/x-charts/PieChart';
 export const AnalyticsView = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Track the timestamp to bust the image cache and show the last update time
   const [forecastTimestamp, setForecastTimestamp] = useState<number>(Date.now());
+  
   const API_BASE_URL = "http://localhost:8000";
 
   useEffect(() => {
-    // Fetch Analytics Summary
+    // 1. Initial fetch to populate data and turn off the loading skeleton
     fetch(`${API_BASE_URL}/api/analytics/summary`)
       .then(res => res.json())
-      .then(json => {
-        setData(json);
+      .then(fetchedData => {
+        setData(fetchedData);
         setLoading(false);
       })
       .catch(err => {
-        console.error("Analytics fetch error:", err);
+        console.error("Failed to fetch analytics:", err);
         setLoading(false);
       });
 
-    // LSTM Image refresh interval
-    const interval = setInterval(() => {
-      setForecastTimestamp(Date.now());
-    }, 600000); 
+    // 2. WebSocket for Analytics Summary (Pie Charts & Balance)
+    const wsSummary = new WebSocket('ws://localhost:8000/ws/summary');
+    wsSummary.onmessage = (event) => {
+      const updatedAnalytics = JSON.parse(event.data);
+      setData(updatedAnalytics); 
+    };
 
-    return () => clearInterval(interval);
+    // 3. WebSocket for LSTM Forecast Image
+    const wsForecast = new WebSocket('ws://localhost:8000/ws/forecast');
+    wsForecast.onmessage = (event) => {
+      const wsData = JSON.parse(event.data);
+      if (wsData?.url) {
+        // Update the timestamp state to trigger a re-render and image refresh
+        setForecastTimestamp(Date.now());
+      }
+    };
+
+    return () => {
+      wsSummary.close();
+      wsForecast.close();
+    };
   }, []);
 
   if (loading) {
@@ -56,7 +74,8 @@ export const AnalyticsView = () => {
 
   const initial = data.account.initial || 1;
   const balance = data.account.balance || 0;
-  const drawdown = (((initial - balance) / initial) * 100).toFixed(2);
+  const pnl = balance - initial;
+  const pnlPercent = initial > 0 ? ((pnl / initial) * 100).toFixed(2) : "0.00";
 
   const cardStyle = {
     p: 2,
@@ -88,9 +107,14 @@ export const AnalyticsView = () => {
           <Paper variant="outlined" sx={cardStyle}>
             <Box sx={{ textAlign: 'center' }}>
               <Typography variant="overline" color="text.secondary">Current Balance</Typography>
-              <Typography variant="h3" sx={{ my: 1 }}>${balance.toLocaleString()}</Typography>
-              <Typography variant="body2" sx={{ color: '#f87171' }}>
-                Max Drawdown: {drawdown}%
+              <Typography variant="h3" sx={{ my: 1 }}>
+                ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Start Balance: ${initial.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="body2" sx={{ color: pnl >= 0 ? '#4caf50' : '#f87171', fontWeight: 'bold', mt: 0.5 }}>
+                {pnl >= 0 ? '+' : ''}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pnlPercent}%)
               </Typography>
             </Box>
           </Paper>
@@ -138,8 +162,6 @@ export const AnalyticsView = () => {
         <Grid item xs={12}>
           <Paper variant="outlined" sx={{ p: 3, border: '1px solid #333', bgcolor: 'background.paper', borderRadius: 2 }}>
             <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-              {/* Pulse indicator */}
-              <Box sx={{ width: 10, height: 10, bgcolor: '#22c55e', borderRadius: '50%', animation: 'pulse 2s infinite' }} />
               SOL/USD LSTM Price Forecast (14-Day)
             </Typography>
             

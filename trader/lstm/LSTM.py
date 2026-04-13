@@ -394,6 +394,11 @@ def plot_results(
     out_path = "/app/trader/lstm/solana_lstm_forecast.png"
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
 
+    try:
+        requests.post("http://api:8000/api/internal/trigger/forecast", timeout=1)
+    except Exception as e:
+        pass
+
     if(not QUIET):
         print(f"[*] Chart saved -> {out_path}")
         plt.show()

@@ -4,11 +4,10 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 import { CoinListItem } from './components/CoinListItem';
 import { CoinDetailView } from './components/CoinDetailView';
-
 import { TraderListItem } from './components/TraderListItem';
 import { TraderDetailView } from './components/TraderDetailView';
-
 import { AnalyticsView } from './components/AnalyticsView';
+import { LiveFeedView } from './components/LiveFeedView';
 
 interface Coin {
   id: string;
@@ -32,10 +31,10 @@ interface Trader {
   total_pnl: number;
 }
 
-const backgroundColor = '#0a0a0a';
 const activeColor = '#208dd1';
 const inactiveColor = '#115e8f';
-const updateIntervalMs = 10000;
+
+const updateIntervalMs = 3000;
 
 const darkTheme = createTheme({
   palette: {
@@ -48,6 +47,9 @@ const darkTheme = createTheme({
       primary: '#ffffff',
       secondary: '#9e9e9e',
     },
+  },
+  typography: {
+    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
   },
   components: {
     MuiPaper: {
@@ -62,7 +64,7 @@ const darkTheme = createTheme({
 
 export default function App() {
   // State for tab management
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'traders' | 'analytics'>('portfolio');
+  const [activeTab, setActiveTab] = useState<'feed' | 'portfolio' | 'traders' | 'analytics'>('feed');
   const [selectedCoinId, setSelectedCoinId] = useState<string | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
 
@@ -100,11 +102,29 @@ export default function App() {
   useEffect(() => {
     fetchCoins();
     fetchTraders();
-    const intervalId = setInterval(() => {
-      fetchCoins();
-      fetchTraders();
-    }, updateIntervalMs);
-    return () => clearInterval(intervalId);
+
+    const wsPositions = new WebSocket('ws://localhost:8000/ws/positions');
+    wsPositions.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      const coinsArray = Array.isArray(data) ? data : (data.positions || []);
+      setCoins(coinsArray);
+      // Optional: Auto-select first coin if none selected when new data arrives
+      setCoins((prev) => {
+         if (prev.length > 0 && !selectedCoinId) setSelectedCoinId(prev[0].id);
+         return prev;
+      });
+    };
+
+    const wsTraders = new WebSocket('ws://localhost:8000/ws/traders');
+    wsTraders.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      setTraders(Array.isArray(data) ? data : (data.wallets || []));
+    };
+
+    return () => {
+      wsPositions.close();
+      wsTraders.close();
+    };
   }, []);
 
   // Sorting logic
@@ -132,7 +152,7 @@ export default function App() {
 
         {/* Navigation Tabs */}
         <Box sx={{ p: 2, borderBottom: '1px solid #333', display: 'flex', gap: 6 }}>
-          {['portfolio', 'traders', 'analytics'].map((tab) => (
+          {['feed', 'portfolio', 'traders', 'analytics'].map((tab) => (
             <Typography
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -151,7 +171,7 @@ export default function App() {
 
         <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Sidebar List Area - Only show for Portfolio and Traders tabs */}
-          {activeTab !== 'analytics' && (
+          {activeTab !== 'analytics' && activeTab !== 'feed' && (
             <Box sx={{ width: 350, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
               <Box sx={{ p: 2, borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="overline">
@@ -197,9 +217,21 @@ export default function App() {
 
           {/* Main Detail Area */}
           <Box sx={{ flex: 1, overflowY: 'auto' }}>
-            {activeTab === 'portfolio' && <CoinDetailView coin={selectedCoin} />}
-            {activeTab === 'traders' && <TraderDetailView trader={selectedTrader} />}
-            {activeTab === 'analytics' && <AnalyticsView />}
+            <Box sx={{ display: activeTab === 'feed' ? 'block' : 'none'}}>
+              <LiveFeedView />
+            </Box>
+            
+            <Box sx={{ display: activeTab === 'portfolio' ? 'block' : 'none' }}>
+              <CoinDetailView coin={selectedCoin} />
+            </Box>
+            
+            <Box sx={{ display: activeTab === 'traders' ? 'block' : 'none'}}>
+              <TraderDetailView trader={selectedTrader} />
+            </Box>
+            
+            <Box sx={{ display: activeTab === 'analytics' ? 'block' : 'none' }}>
+              <AnalyticsView />
+            </Box>
           </Box>
         </Box>
       </Box>
