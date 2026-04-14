@@ -44,9 +44,15 @@ export function LiveFeedView() {
     // WebSocket Subscriptions
     const wsFeed = new WebSocket('ws://localhost:8000/ws/live_feed');
     wsFeed.onmessage = (event) => {
-      const newTrade = JSON.parse(event.data);
-      // Prepend new trade and keep max 100
-      setFeed(prev => [newTrade, ...prev].slice(0, 100)); 
+      const data = JSON.parse(event.data);
+      
+      // Clear the feed if the reset signal is received
+      if (data.clear) {
+        setFeed([]);
+      } else {
+        // Prepend new trade and keep max 100
+        setFeed(prev => [data, ...prev].slice(0, 100)); 
+      }
     };
 
     const wsSummary = new WebSocket('ws://localhost:8000/ws/summary');
@@ -57,8 +63,9 @@ export function LiveFeedView() {
 
     const wsPositions = new WebSocket('ws://localhost:8000/ws/positions');
     wsPositions.onmessage = (event) => {
-      const positions = JSON.parse(event.data);
-      setInvestedValue(positions.reduce((sum: number, pos: any) => sum + (pos.cost_basis || 0), 0));
+      const data = JSON.parse(event.data);
+      const positionsArray = Array.isArray(data) ? data : (data.positions || []);
+      setInvestedValue(positionsArray.reduce((sum: number, pos: any) => sum + (pos.cost_basis || 0), 0));
     };
 
     // Cleanup on unmount

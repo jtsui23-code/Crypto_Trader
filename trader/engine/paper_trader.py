@@ -6,9 +6,13 @@ import psycopg2
 import itertools
 from pathlib import Path
 from dotenv import load_dotenv
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from datetime import datetime, timezone
 import requests
+import threading
+import uvicorn
+from fastapi import FastAPI
+from pydantic import BaseModel
 
 load_dotenv()
 
@@ -151,6 +155,7 @@ class Trade:
         self.price = price
         self.amount = amount
         self.timestamp = timestamp
+        
 
 
 """
@@ -225,6 +230,7 @@ class PaperAccount:
         self.positions: Dict[str, dict] = {}
         self.tradeHistory: List[Trade] = []
         self.targets: list = []
+        self.reload_requested = False
 
         self._price_cache: Dict[str, Optional[float]] = {}
         self._jupiter_api_key = os.getenv("JUPITER_API_KEY", "")
@@ -259,7 +265,7 @@ class PaperAccount:
             self._apply_config_row(next_config)
 
         if reset:
-            self.resetPortfolio()
+            self.reset_portfolio()
 
 
     # -----------------------------------------------------------------------
@@ -314,7 +320,7 @@ class PaperAccount:
 
     """
     Method Name:
-        resetPortfolio
+        reset_portfolio
 
     Parameters:
         newBalance (float):
@@ -336,7 +342,9 @@ class PaperAccount:
         - Resets _last_seen_swap_id to the current max swap ID so the
         engine does not replay old swaps after the reset.
     """
-    def resetPortfolio(self, newBalance: float = None):
+    def reset_portfolio(self, newBalance: float = None):
+        print("\nResetting portfolio to a clean state...")
+
         if newBalance is None:
             newBalance = self.initialBalance
 
@@ -351,17 +359,34 @@ class PaperAccount:
             try:
                 cursor = self._db_conn.cursor()
                 cursor.execute("DELETE FROM paper_positions")
+                cursor.execute("DELETE FROM paper_trades")
+                cursor.execute("DELETE FROM paper_trader_performance")
+                cursor.execute("DELETE FROM swaps")
                 cursor.close()
+                
+                # Re-seed the performance table with zeroed-out rows for current targets
+                self._ensure_trader_performance_rows()
             except Exception as e:
-                print(f"Error clearing positions during reset: {e}")
+                print(f"Error clearing tables during reset: {e}")
 
         # Persist the reset balance
         self._save_account()
 
         # Advance the swap cursor so stale swaps are not replayed
         self._last_seen_swap_id = self._get_max_swap_id()
+        self.trade_count = 0
 
         print(f"Portfolio reset. Balance restored to ${self.balance:.2f}.")
+
+        # Notify the API to refresh its state and broadcast the cleared positions
+        try:
+            requests.post("http://api:8000/api/internal/trigger/summary", timeout=1)
+            requests.post("http://api:8000/api/internal/trigger/traders", timeout=1)
+            requests.post("http://api:8000/api/internal/broadcast/positions", json={"positions": []}, timeout=1)
+
+            requests.post("http://api:8000/api/internal/broadcast/live_feed", json={"clear": True}, timeout=1)
+        except Exception as e:
+            pass
 
 
     # -----------------------------------------------------------------------
@@ -586,12 +611,12 @@ class PaperAccount:
         total_count   = self._count_total_configs()
 
         print(
-            f"\n{'='*60}\n"
+            f"\n{'='*20}\n"
             f"[CONFIG TEST] Config id={self._current_config_id} completed {SAMPLE_SIZE} trades.\n"
             f"  Start: ${start_balance:.2f} | End: ${end_balance:.2f} | "
             f"PnL: ${pnl:+.2f}\n"
             f"  Progress: {tested_count}/{total_count} configs done.\n"
-            f"{'='*60}"
+            f"{'='*20}"
         )
 
         self._log_config_result(
@@ -612,7 +637,7 @@ class PaperAccount:
             raise SystemExit(0)
 
         # Reset portfolio and apply the next config
-        self.resetPortfolio(newBalance=self.initialBalance)
+        self.reset_portfolio(newBalance=self.initialBalance)
         self._apply_config_row(next_config)
 
 
@@ -674,7 +699,7 @@ class PaperAccount:
             config_test_runs in Neon and prints a ranked summary table
             sorted by PnL descending.
         """
-        print(f"\n{'='*60}")
+        print(f"\n{'='*20}")
         print("[CONFIG TEST] ===== FINAL RESULTS SUMMARY =====")
 
         if self._db_conn is None:
@@ -718,7 +743,7 @@ class PaperAccount:
                 f"{ts_pct:>6.2f} {sl_pct:>6.2f} {hold_s:>6} "
                 f"${pnl:>+9.2f} {pnl_pct:>+7.2f}% {sample_size:>7}"
             )
-        print(f"{'='*60}\n")
+        print(f"{'='*20}\n")
 
 
 
@@ -1772,7 +1797,7 @@ class PaperAccount:
         )
 
         print(
-            f"---------------------------------------------------------------------------------------------------------------------------"
+            f"--------------------------------------"
             f"\n[PARTIAL SELL] {token_symbol} |\n "
             f"Reason: {reason} |\n "
             f"Sold {fraction*100:.0f}% ({sell_amount:.4f} tokens) |\n "
@@ -1781,7 +1806,7 @@ class PaperAccount:
             f"Partial PnL ${realised_pnl:+.2f} |\n "
             f"Remaining {pos['amount']:.4f} tokens | "
             f"Balance ${self.balance:.2f}\n"
-            f"---------------------------------------------------------------------------------------------------------------------------"
+            f"--------------------------------------"
         )
 
         self._broadcast_updates({
@@ -1874,14 +1899,14 @@ class PaperAccount:
         self._update_trader_performance(wallet_address, realised_pnl)
 
         print(
-            f"---------------------------------------------------------------------------------------------------------------------------"
+            f"--------------------------------------"
             f"\n[SELL] {token_symbol} |\n "
             f"Reason: {reason} |\n "
             f"Price ${slipped_price:.6f} |\n "
             f"Proceeds ${proceeds:.2f} |\n "
             f"Realised PnL ${realised_pnl:+.2f} |\n "
             f"Balance ${self.balance:.2f}\n"
-            f"---------------------------------------------------------------------------------------------------------------------------"
+            f"--------------------------------------"
         )
 
         self._broadcast_updates({
@@ -1947,6 +1972,12 @@ class PaperAccount:
             )
         try:
             while True:
+                if self.reload_requested:
+                    print("[Engine] Reloading targets...")
+                    self.targets = self._load_targets()
+                    self._ensure_trader_performance_rows()
+                    self.reload_requested = False
+
                 print(f"[{datetime.now().strftime('%H:%M:%S')}] --- Poll ---")
                 self._price_cache.clear()
 
@@ -1955,7 +1986,7 @@ class PaperAccount:
                 if new_swaps:
                     for swap in new_swaps:
                         print(
-                            f"  [NEW SWAP] ID={swap['id']} | "
+                            f"[NEW SWAP] ID={swap['id']} | "
                             f"Owner={swap['owner'][:8]}... | "
                             f"Mint={swap['token_out_mint']}"
                         )
@@ -2169,8 +2200,90 @@ def trigger_websocket(channel: str, data: dict):
     except Exception as e:
         print(f"Failed to broadcast {channel}: {e}")            
 
+
+"""
+Method Name:
+    start_engine_api
+
+Parameters:
+        account_instance (PaperAccount):
+            The instance of the PaperAccount engine, passed in so the API can
+            call methods to reset the engine or update config live.
+
+Return:
+    None
+
+Method Description:
+    This method starts a lightweight Flask web server inside the engine process,
+    listening on port 8001. It exposes two POST endpoints:
+
+    1. /command/reset:
+        Accepts a JSON payload with an optional "new_balance" field.
+        When called, it resets the engine's portfolio to the specified new balance
+        (or $10,000 if not provided) and clears all positions and trade history.
+
+    2. /command/update_config:
+        Accepts a JSON payload with any of the engine configuration parameters
+        (risk_per_trade, take_profit_pct, take_profit_split, trailing_stop_pct,
+            stop_loss_pct, max_hold_seconds).
+        When called, it updates the engine's global configuration variables in real-time,
+        allowing for dynamic tuning without restarting the engine.
+"""
+def start_engine_api(account_instance):
+    """
+    Starts a lightweight FastAPI server inside the engine to receive 
+    live updates and reset commands from the main backend API.
+    """
+    app = FastAPI()
+
+    # Define expected request models
+    class ResetData(BaseModel):
+        new_balance: float = 10000.0
+
+    class ConfigData(BaseModel):
+        risk_per_trade: float = None
+        take_profit_pct: float = None
+        take_profit_split: float = None
+        trailing_stop_pct: float = None
+        stop_loss_pct: float = None
+        max_hold_seconds: int = None
+
+    @app.post('/command/reset')
+    def reset_engine(data: ResetData):
+        account_instance.reset_portfolio(newBalance=data.new_balance)
+        return {"status": "success", "message": f"Engine reset to ${data.new_balance}"}
+
+    @app.post('/command/update_config')
+    def update_config(data: ConfigData):
+        global RISK_PER_TRADE, TAKE_PROFIT_PCT, TAKE_PROFIT_SPLIT
+        global TRAILING_STOP_PCT, STOP_LOSS_PCT, MAX_HOLD_SECONDS
+        
+        if data.risk_per_trade is not None: RISK_PER_TRADE = data.risk_per_trade
+        if data.take_profit_pct is not None: TAKE_PROFIT_PCT = data.take_profit_pct
+        if data.take_profit_split is not None: TAKE_PROFIT_SPLIT = data.take_profit_split
+        if data.trailing_stop_pct is not None: TRAILING_STOP_PCT = data.trailing_stop_pct
+        if data.stop_loss_pct is not None: STOP_LOSS_PCT = data.stop_loss_pct
+        if data.max_hold_seconds is not None: MAX_HOLD_SECONDS = data.max_hold_seconds
+        
+        # SET A FLAG instead of doing database operations in this thread
+        account_instance.reload_requested = True
+        
+        return {"status": "success", "message": "Configuration updated live"}
+
+    # Run the uvicorn server programmatically
+    # log_level="warning" keeps the engine console clean from standard API logs
+    uvicorn.run(app, host='0.0.0.0', port=8001, log_level="warning")
+
 if __name__ == "__main__":
     # reset=False — persisted balance, positions and swap cursor are restored
     # on restart.  Pass reset=True only when you deliberately want a clean slate.
     account = PaperAccount(initialBalance=10000.0, reset=False, generate_config=False)
-    account.run()
+
+    # Start the FastAPI server in a separate thread so it doesn't block the main trading loop
+    cmd_thread = threading.Thread(target=start_engine_api, args=(account,), daemon=True)
+    cmd_thread.start()
+
+    try:
+        account.run()
+    except KeyboardInterrupt:
+        print("\nStopping engine...")

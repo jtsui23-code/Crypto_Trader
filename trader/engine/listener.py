@@ -23,7 +23,6 @@ class WhaleListener:
         file_path = base_path / "data" / "whales.json"
 
         if not file_path.exists():
-            print(f"ERROR: Whale file not found at {file_path}")
             return []
 
         try:
@@ -35,16 +34,37 @@ class WhaleListener:
             elif isinstance(data, list):
                 wallets = data
             else:
-                print(f"ERROR: Unexpected JSON format in {file_path}")
+                print(f"ERROR: Expected list in whales.json, got {type(data)}")
                 return []
 
             addresses = [w for w in wallets if isinstance(w, str)]
-            print(f"Loaded {len(addresses)} whale addresses from {file_path}")
             return addresses
 
         except Exception as e:
             print(f"Error reading {file_path}: {e}")
             return []
+
+    async def _watch_config_changes(self, websocket):
+        """Background task that monitors whales.json and forces a reconnect if it changes."""
+        base_path = Path(__file__).parent.parent
+        file_path = base_path / "data" / "whales.json"
+        last_mtime = os.path.getmtime(file_path) if file_path.exists() else 0
+
+        try:
+            while True:
+                await asyncio.sleep(2)
+                current_mtime = os.path.getmtime(file_path) if file_path.exists() else 0
+                if current_mtime > last_mtime:
+                    last_mtime = current_mtime
+                    new_targets = self._load_targets()
+                    # If the targets actually changed, trigger a reset
+                    if set(new_targets) != set(self.targets):
+                        print("\n[!] Whales config updated! Forcing listener restart...")
+                        self.targets = new_targets
+                        await websocket.close() # Breaks the async for loop to reconnect
+                        break
+        except asyncio.CancelledError:
+            pass
 
     async def _connect_and_listen(self):
         async with connect(self.rpc_url) as websocket:
@@ -68,30 +88,33 @@ class WhaleListener:
             confirmed = 0
             needed = len(subscribed_addresses)
 
-            async for msg in websocket:
-                try:
-                    notif = msg[0]
-                except (IndexError, TypeError):
-                    continue
+            # Start the background watcher
+            watcher_task = asyncio.create_task(self._watch_config_changes(websocket))
 
-                if isinstance(notif, SubscriptionResult):
-                    sub_id = notif.result
-                    if confirmed < needed:
-                        address = subscribed_addresses[confirmed]
-                        subscription_map[sub_id] = address
-                        confirmed += 1
-                        print(f"Subscribed to {address[:6]}...{address[-4:]} (id: {sub_id})")
-                        if confirmed >= needed:
-                            print(f"All {confirmed} subscriptions confirmed. Monitoring whales...")
+            try:
+                async for msg in websocket:
+                    try:
+                        notif = msg[0]
+                    except (IndexError, TypeError):
+                        continue
 
-                elif isinstance(notif, LogsNotification):
-                    # Fire and forget — never await decode work inside the websocket loop
-                    asyncio.create_task(
-                        self._process_message(notif, subscription_map)
-                    )
+                    if isinstance(notif, SubscriptionResult):
+                        sub_id = notif.result
+                        if confirmed < needed:
+                            address = subscribed_addresses[confirmed]
+                            subscription_map[sub_id] = address
+                            confirmed += 1
+                            print(f"Subscribed to {address[:6]}...{address[-4:]} (id: {sub_id})")
+                            if confirmed >= needed:
+                                print(f"All {confirmed} subscriptions confirmed. Monitoring whales...")
+
+                    elif isinstance(notif, LogsNotification):
+                        # Fire and forget
+                        asyncio.create_task(self._process_message(notif, subscription_map))
+            finally:
+                watcher_task.cancel() # Clean up the watcher if websocket drops
 
     async def _decode_with_retry(self, signature: str, max_attempts: int = 5, base_delay: float = 1.5):
-        """Retry decode_swap with exponential backoff to allow the tx to propagate."""
         for attempt in range(max_attempts):
             try:
                 result = await asyncio.to_thread(self.decoder.decode_swap, signature)
@@ -117,11 +140,7 @@ class WhaleListener:
             signature = str(value.signature)
             err = value.err
 
-            if not signature:
-                return
-
-            if err is not None:
-                print(f"Transaction {signature} for {whale_address[:6]}...{whale_address[-4:]} failed (err: {err})")
+            if not signature or err is not None:
                 return
 
             print(f"\nWhale activity detected! Wallet: {whale_address[:6]}...{whale_address[-4:]} | Sig: {signature}")
@@ -131,19 +150,23 @@ class WhaleListener:
             print(f"Error processing message: {type(e).__name__}: {e}")
 
     async def start(self):
-        if not self.targets:
-            print("No whale addresses to monitor. Exiting.")
-            return
-
-        retry_delay = 10
+        retry_delay = 5
         while True:
+            # If empty, wait for the user to add whales instead of exiting completely
+            if not self.targets:
+                print("No whale addresses to monitor. Waiting for targets...")
+                await asyncio.sleep(retry_delay)
+                self.targets = self._load_targets()
+                continue
+
             try:
                 await self._connect_and_listen()
             except Exception as e:
-                print(f"WebSocket connection lost: {e}")
-                print(f"Reconnecting in {retry_delay} seconds...")
-                await asyncio.sleep(retry_delay)
-
+                # Normal disconnect or closed intentionally by watcher
+                pass
+            
+            print(f"Reconnecting in {retry_delay} seconds...")
+            await asyncio.sleep(retry_delay)
 
 if __name__ == "__main__":
     listener = WhaleListener()

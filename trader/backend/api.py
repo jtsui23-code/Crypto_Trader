@@ -9,7 +9,22 @@ from dotenv import load_dotenv
 import uvicorn
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List, Any
+from pydantic import BaseModel
+import requests
 
+class WhalesData(BaseModel):
+    wallets: List[str]
+
+class EngineConfig(BaseModel):
+    risk_per_trade: float
+    take_profit_pct: float
+    take_profit_split: float
+    trailing_stop_pct: float
+    stop_loss_pct: float
+    max_hold_seconds: int
+
+class ResetData(BaseModel):
+    new_balance: float
 
 class ConnectionManager:
     def __init__(self):
@@ -40,6 +55,9 @@ load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 # Initialize FastAPI and the connection manager for WebSocket handling
 app = FastAPI()    
 manager = ConnectionManager()
+
+WHALES_FILE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "whales.json")
+CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "config.json")
 
 
 # Define the base directory and the path to the LSTM module
@@ -310,6 +328,61 @@ async def get_paper_positions():
         if conn: conn.close()
         raise HTTPException(status_code=500, detail=str(e))
 
-if __name__ == "__main__":
-    print("Starting API server on http://0.0.0.0:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.get("/api/settings/whales")
+async def get_whales():
+    if os.path.exists(WHALES_FILE_PATH):
+        with open(WHALES_FILE_PATH, 'r') as f:
+            return json.load(f)
+    return {"wallets": []}
+
+ENGINE_URL = "http://paper_trader:8001"
+
+@app.post("/api/settings/whales")
+async def update_whales(data: WhalesData):
+    os.makedirs(os.path.dirname(WHALES_FILE_PATH), exist_ok=True)
+    with open(WHALES_FILE_PATH, 'w') as f:
+        json.dump(data.model_dump(), f, indent=2)
+    
+    conn = get_db_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            # Delete rows where the wallet_address is no longer in the provided list
+            query = """
+                DELETE FROM paper_trader_performance 
+                WHERE NOT (wallet_address = ANY(%s))
+            """
+            cur.execute(query, (data.wallets,))
+            conn.commit()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"Database sync failed: {e}")
+            if conn: conn.close()
+        
+    try:
+        requests.post(f"{ENGINE_URL}/command/update_config", json={}, timeout=2)
+    except Exception as e:
+        print(f"Engine notification failed: {e}")
+
+    updated_traders = await get_targeted_wallets()
+    await manager.broadcast(updated_traders, "traders")        
+
+    return {"status": "success"}
+
+@app.post("/api/settings/config")
+def update_config(data: EngineConfig):
+    # Forward the new config directly to the engine
+    try:
+        resp = requests.post(f"{ENGINE_URL}/command/update_config", json=data.dict(), timeout=2)
+        return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Engine unreachable: {e}")
+
+@app.post("/api/engine/reset")
+def trigger_engine_reset(data: ResetData):
+    try:
+        resp = requests.post(f"{ENGINE_URL}/command/reset", json=data.dict(), timeout=5)
+        return resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Engine unreachable: {e}")

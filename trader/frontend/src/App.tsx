@@ -8,6 +8,7 @@ import { TraderListItem } from './components/TraderListItem';
 import { TraderDetailView } from './components/TraderDetailView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { LiveFeedView } from './components/LiveFeedView';
+import { SettingsView } from './components/SettingsView';
 
 interface Coin {
   id: string;
@@ -64,7 +65,7 @@ const darkTheme = createTheme({
 
 export default function App() {
   // State for tab management
-  const [activeTab, setActiveTab] = useState<'feed' | 'portfolio' | 'traders' | 'analytics'>('feed');
+  const [activeTab, setActiveTab] = useState<'feed' | 'portfolio' | 'traders' | 'analytics' | 'settings'>('feed');
   const [selectedCoinId, setSelectedCoinId] = useState<string | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
 
@@ -108,7 +109,6 @@ export default function App() {
       const data = JSON.parse(event.data);
       const coinsArray = Array.isArray(data) ? data : (data.positions || []);
       setCoins(coinsArray);
-      // Optional: Auto-select first coin if none selected when new data arrives
       setCoins((prev) => {
          if (prev.length > 0 && !selectedCoinId) setSelectedCoinId(prev[0].id);
          return prev;
@@ -152,7 +152,7 @@ export default function App() {
 
         {/* Navigation Tabs */}
         <Box sx={{ p: 2, borderBottom: '1px solid #333', display: 'flex', gap: 6 }}>
-          {['feed', 'portfolio', 'traders', 'analytics'].map((tab) => (
+          {['feed', 'portfolio', 'traders', 'analytics', 'settings'].map((tab) => (
             <Typography
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -232,7 +232,11 @@ export default function App() {
             <Box sx={{ display: activeTab === 'analytics' ? 'block' : 'none' }}>
               <AnalyticsView />
             </Box>
-          </Box>
+
+            <Box sx={{ display: activeTab === 'settings' ? 'block' : 'none' }}>
+              <SettingsView />
+            </Box>
+          </Box>  
         </Box>
       </Box>
     </ThemeProvider>
