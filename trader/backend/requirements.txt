@@ -4,3 +4,4 @@ websockets==14.2
 sqlalchemy
 psycopg2-binary
 python-dotenv==1.0.1
+requests
