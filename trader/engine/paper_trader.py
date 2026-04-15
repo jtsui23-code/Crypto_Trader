@@ -55,6 +55,20 @@ MAX_HOLD_SECONDS = 70  # 3 minutes
 # VOLUME_DROP_EXIT      = True   # Sell if 5-min volume drops sharply (needs price API extension)
 # WHALE_EXIT_MIRROR     = True   # Sell when the whale sells the same token (full copy)
 
+# Load any previously saved config overrides from data/config.json so we can
+_CONFIG_FILE = Path(__file__).parent.parent / "data" / "config.json"
+if _CONFIG_FILE.exists():
+    try:
+        with open(_CONFIG_FILE, 'r') as f:
+            _saved = json.load(f)
+            RISK_PER_TRADE = _saved.get("risk_per_trade", RISK_PER_TRADE)
+            TAKE_PROFIT_PCT = _saved.get("take_profit_pct", TAKE_PROFIT_PCT)
+            TAKE_PROFIT_SPLIT = _saved.get("take_profit_split", TAKE_PROFIT_SPLIT)
+            TRAILING_STOP_PCT = _saved.get("trailing_stop_pct", TRAILING_STOP_PCT)
+            STOP_LOSS_PCT = _saved.get("stop_loss_pct", STOP_LOSS_PCT)
+            MAX_HOLD_SECONDS = _saved.get("max_hold_seconds", MAX_HOLD_SECONDS)
+    except Exception as e:
+        print(f"Error loading persistent config: {e}")
 
 # ---------------------------------------------------------------------------
 # Configuration Testing Mode
@@ -375,6 +389,8 @@ class PaperAccount:
         # Advance the swap cursor so stale swaps are not replayed
         self._last_seen_swap_id = self._get_max_swap_id()
         self.trade_count = 0
+
+        self.reload_requested = True
 
         print(f"Portfolio reset. Balance restored to ${self.balance:.2f}.")
 

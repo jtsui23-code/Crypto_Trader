@@ -27,10 +27,17 @@ export function SettingsView() {
 
 
   useEffect(() => {
+    // Fetch whales
     fetch('http://localhost:8000/api/settings/whales')
       .then(res => res.json())
       .then(data => setWhales(data.wallets.join('\n')))
       .catch(console.error);      
+
+    // Fetch config
+    fetch('http://localhost:8000/api/settings/config')
+      .then(res => res.json())
+      .then(data => setConfig(data))
+      .catch(console.error);
   }, []);
 
 

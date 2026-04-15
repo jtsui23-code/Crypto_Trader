@@ -173,6 +173,23 @@ async def get_targeted_wallets():
         if conn: conn.close()
         print(f"Error fetching performance data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    
+# This endpoint retrieves the current engine configuration settings from a JSON file. If the file doesn't exist, it returns default values.
+@app.get("/api/settings/config")
+async def get_config():
+    if os.path.exists(CONFIG_FILE_PATH):
+        with open(CONFIG_FILE_PATH, 'r') as f:
+            return json.load(f)
+    # Return defaults if the file doesn't exist yet
+    return {
+        "risk_per_trade": 0.05,
+        "take_profit_pct": 0.2,
+        "take_profit_split": 0.7,
+        "trailing_stop_pct": 0.35,
+        "stop_loss_pct": 0.15,
+        "max_hold_seconds": 70
+    }
+
 
 # This endpoint retrieves the most recent 100 trades from the paper_trades table to display in the live feed on the frontend dashboard.
 @app.get("/api/live-feed")
@@ -385,19 +402,26 @@ async def update_whales(data: WhalesData):
 
     return {"status": "success"}
 
+# Update the existing POST endpoint to save the config to disk
 @app.post("/api/settings/config")
 def update_config(data: EngineConfig):
+    # Save the config locally for persistence
+    os.makedirs(os.path.dirname(CONFIG_FILE_PATH), exist_ok=True)
+    with open(CONFIG_FILE_PATH, 'w') as f:
+        json.dump(data.model_dump(), f, indent=2)
+
     # Forward the new config directly to the engine
     try:
-        resp = requests.post(f"{ENGINE_URL}/command/update_config", json=data.dict(), timeout=2)
+        resp = requests.post(f"{ENGINE_URL}/command/update_config", json=data.model_dump(), timeout=2)
         return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Engine unreachable: {e}")
 
+# This endpoint allows the frontend to trigger a reset of the paper trading engine, optionally setting a new starting balance.
 @app.post("/api/engine/reset")
 def trigger_engine_reset(data: ResetData):
     try:
-        resp = requests.post(f"{ENGINE_URL}/command/reset", json=data.dict(), timeout=5)
+        resp = requests.post(f"{ENGINE_URL}/command/reset", json=data.model_dump(), timeout=5)
         return resp.json()
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Engine unreachable: {e}")
