@@ -1,0 +1,8 @@
+{
+  "risk_per_trade": 0.05,
+  "take_profit_pct": 0.2,
+  "take_profit_split": 0.7,
+  "trailing_stop_pct": 0.35,
+  "stop_loss_pct": 0.15,
+  "max_hold_seconds": 60
+}

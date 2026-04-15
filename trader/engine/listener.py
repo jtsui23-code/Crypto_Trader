@@ -44,7 +44,7 @@ class WhaleListener:
             print(f"Error reading {file_path}: {e}")
             return []
 
-    async def _watch_config_changes(self, websocket):
+    async def _watch_config_changes(self, main_task):
         """Background task that monitors whales.json and forces a reconnect if it changes."""
         base_path = Path(__file__).parent.parent
         file_path = base_path / "data" / "whales.json"
@@ -61,7 +61,7 @@ class WhaleListener:
                     if set(new_targets) != set(self.targets):
                         print("\n[!] Whales config updated! Forcing listener restart...")
                         self.targets = new_targets
-                        await websocket.close() # Breaks the async for loop to reconnect
+                        main_task.cancel()
                         break
         except asyncio.CancelledError:
             pass
@@ -89,7 +89,8 @@ class WhaleListener:
             needed = len(subscribed_addresses)
 
             # Start the background watcher
-            watcher_task = asyncio.create_task(self._watch_config_changes(websocket))
+            main_task = asyncio.current_task()
+            watcher_task = asyncio.create_task(self._watch_config_changes(main_task))
 
             try:
                 async for msg in websocket:
@@ -151,6 +152,7 @@ class WhaleListener:
 
     async def start(self):
         retry_delay = 5
+        # The main loop will keep the listener running indefinitely, attempting to reconnect if the connection drops or if the config changes. It also handles the case where there are no targets to monitor, waiting for the user to add some instead of exiting.
         while True:
             # If empty, wait for the user to add whales instead of exiting completely
             if not self.targets:
@@ -159,12 +161,19 @@ class WhaleListener:
                 self.targets = self._load_targets()
                 continue
 
+            self.decoder.whales = set(self.targets)
+            listener_task = asyncio.create_task(self._connect_and_listen())
+
             try:
-                await self._connect_and_listen()
+                # This will run until the websocket connection drops or the watcher triggers a cancel
+                await listener_task
+            except asyncio.CancelledError:
+                # Triggers immediate reconnect without the 5 second delay
+                continue
+            # Catch-all to prevent the listener from crashing due to unexpected errors. It will log the error and attempt to reconnect after a delay.
             except Exception as e:
-                # Normal disconnect or closed intentionally by watcher
-                pass
-            
+                print(f"Disconnected: {e}")
+
             print(f"Reconnecting in {retry_delay} seconds...")
             await asyncio.sleep(retry_delay)
 

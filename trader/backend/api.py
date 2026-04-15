@@ -358,9 +358,14 @@ async def update_whales(data: WhalesData):
     # Remove duplicates while preserving order
     data.wallets = list(dict.fromkeys(data.wallets))
 
+    # Ensure the directory exists before writing the file
     os.makedirs(os.path.dirname(WHALES_FILE_PATH), exist_ok=True)
-    with open(WHALES_FILE_PATH, 'w') as f:
+    
+    # Write to a temporary file first, then atomically replace the target file
+    temp_path = WHALES_FILE_PATH + ".tmp"
+    with open(temp_path, 'w') as f:
         json.dump(data.model_dump(), f, indent=2)
+    os.replace(temp_path, WHALES_FILE_PATH)
     
     conn = get_db_connection()
     if conn:
