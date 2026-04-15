@@ -6,7 +6,6 @@ import psycopg2
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import uvicorn
 from fastapi import WebSocket, WebSocketDisconnect
 from typing import Dict, List, Any
 from pydantic import BaseModel
@@ -159,15 +158,15 @@ async def get_targeted_wallets():
 
         return [
             {
-                "id": r[0], # wallet_address used as ID
+                "id": r[0],
                 "name": r[0],
-                "record": f"${r[6]:.2f} Total PnL",
-                "winning_trades": r[1],
-                "losing_trades": r[2],
-                "best_trade_pnl": float(r[3]),
-                "worst_trade_pnl": float(r[4]),
-                "avg_pnl_per_trade": float(r[5]),
-                "total_pnl": float(r[6])
+                "record": f"${(r[6] or 0):.2f} Total PnL",
+                "winning_trades": r[1] or 0,
+                "losing_trades": r[2] or 0,
+                "best_trade_pnl": float(r[3] or 0),
+                "worst_trade_pnl": float(r[4] or 0),
+                "avg_pnl_per_trade": float(r[5] or 0),
+                "total_pnl": float(r[6] or 0)
             } for r in rows
         ]
     except Exception as e:
@@ -339,6 +338,9 @@ ENGINE_URL = "http://paper_trader:8001"
 
 @app.post("/api/settings/whales")
 async def update_whales(data: WhalesData):
+    # Remove duplicates while preserving order
+    data.wallets = list(dict.fromkeys(data.wallets))
+
     os.makedirs(os.path.dirname(WHALES_FILE_PATH), exist_ok=True)
     with open(WHALES_FILE_PATH, 'w') as f:
         json.dump(data.model_dump(), f, indent=2)
@@ -347,12 +349,25 @@ async def update_whales(data: WhalesData):
     if conn:
         try:
             cur = conn.cursor()
-            # Delete rows where the wallet_address is no longer in the provided list
-            query = """
-                DELETE FROM paper_trader_performance 
-                WHERE NOT (wallet_address = ANY(%s))
+            
+            if data.wallets:
+                delete_query = """
+                    DELETE FROM paper_trader_performance 
+                    WHERE NOT (wallet_address = ANY(%s::text[]))
+                """
+                cur.execute(delete_query, (data.wallets,))
+            else:
+                cur.execute("DELETE FROM paper_trader_performance")
+
+            add_query = """
+                INSERT INTO paper_trader_performance (wallet_address)
+                VALUES (%s)
+                ON CONFLICT (wallet_address) DO NOTHING
             """
-            cur.execute(query, (data.wallets,))
+            
+            for wallet in data.wallets:
+                cur.execute(add_query, (wallet,))
+
             conn.commit()
             cur.close()
             conn.close()
@@ -366,7 +381,7 @@ async def update_whales(data: WhalesData):
         print(f"Engine notification failed: {e}")
 
     updated_traders = await get_targeted_wallets()
-    await manager.broadcast(updated_traders, "traders")        
+    await manager.broadcast({"wallets": updated_traders}, "traders")       
 
     return {"status": "success"}
 
