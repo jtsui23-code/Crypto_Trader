@@ -101,7 +101,12 @@ export function LiveFeedView() {
       {/* Feed List */}
       <List>
         {feed.map((trade, i) => (
-          <ListItem key={i} component={Paper} sx={{ mb: 2, p: 2, bgcolor: 'background.paper', borderRadius: 2, borderLeft: `6px solid ${trade.side === 'BUY' ? '#2e7d32' : '#c62828'}` }}>
+          <ListItem key={i} component={Paper} sx={{ mb: 2, p: 2, bgcolor: '#000000e4', borderRadius: 2, 
+            borderLeft: `1px solid ${trade.side === 'BUY' ? '#2e7d32' : '#c62828'}`,
+            borderRight: (trade.side === 'SELL' && trade.realised_pnl !== null) 
+              ? `1px solid ${trade.realised_pnl > 0 ? '#4caf50' : '#f44336'}` 
+              : 'none'
+          }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
               
               {/* Left Column: Asset & Time */}

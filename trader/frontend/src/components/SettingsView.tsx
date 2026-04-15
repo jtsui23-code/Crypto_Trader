@@ -14,6 +14,7 @@ export function SettingsView() {
   });
 
   const [isResetting, setIsResetting] = useState(false);
+  const [isSavingWhales, setIsSavingWhales] = useState(false);
 
   const PARAM_DESCRIPTIONS: Record<string, string> = {
     risk_per_trade: "The fraction of your total balance to risk on a single trade (e.g., 0.05 = 5%).",
@@ -29,20 +30,31 @@ export function SettingsView() {
     fetch('http://localhost:8000/api/settings/whales')
       .then(res => res.json())
       .then(data => setWhales(data.wallets.join('\n')))
-      .catch(console.error);
-      
-    // Optional: Fetch current config here once implemented on backend
+      .catch(console.error);      
   }, []);
 
 
   const handleWhaleSave = async () => {
-    const walletArray = whales.split('\n').map(w => w.trim()).filter(w => w);
-    await fetch('http://localhost:8000/api/settings/whales', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ wallets: walletArray })
-    });
-    alert('Whales updated successfully');
+    setIsSavingWhales(true);
+    try {
+          const uniqueWallets = Array.from(
+            new Set(whales.split('\n').map(w => w.trim()).filter(w => w))
+          );
+
+          setWhales(uniqueWallets.join('\n'));
+
+          await fetch('http://localhost:8000/api/settings/whales', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallets: uniqueWallets })
+          });
+          alert('Whales updated successfully');
+    } catch (error) {
+      console.error(error);
+      alert('Failed to update whales');
+    } finally {
+      setIsSavingWhales(false);
+    }
   };
 
   const handleConfigSave = async () => {
@@ -87,6 +99,7 @@ export function SettingsView() {
               fullWidth
               variant="outlined"
               value={whales}
+              disabled={isSavingWhales} // Disable input while saving
               onChange={(e) => setWhales(e.target.value)}
               placeholder="Enter wallet addresses (one per line)"
               sx={{ mb: 2 }}
@@ -94,8 +107,14 @@ export function SettingsView() {
                 style: { fontFamily: 'monospace' } 
               }}
             />
-            <Button variant="contained" onClick={handleWhaleSave} sx={{ width: '200px' }}>
-              Save Wallets
+            <Button 
+              variant="contained" 
+              onClick={handleWhaleSave} 
+              sx={{ width: '200px' }}
+              disabled={isSavingWhales} // Disable button while saving
+              startIcon={isSavingWhales ? <CircularProgress size={20} color="inherit" /> : null}
+            >
+              {isSavingWhales ? 'Saving...' : 'Save Wallets'}
             </Button>
           </Paper>
         </Grid>

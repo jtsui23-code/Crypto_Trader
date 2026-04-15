@@ -35,18 +35,16 @@ interface Trader {
 const activeColor = '#208dd1';
 const inactiveColor = '#115e8f';
 
-const updateIntervalMs = 3000;
-
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',
     background: {
-      default: '#0a0a0a',
-      paper: '#1a1a1a',
+      default: '#000000',
+      paper: '#00000090',
     },
     text: {
-      primary: '#ffffff',
-      secondary: '#9e9e9e',
+      primary: '#e6e0f0',
+      secondary: '#acaaae',
     },
   },
   typography: {
@@ -118,7 +116,8 @@ export default function App() {
     const wsTraders = new WebSocket('ws://localhost:8000/ws/traders');
     wsTraders.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      setTraders(Array.isArray(data) ? data : (data.wallets || []));
+      const traderArray = Array.isArray(data) ? data : (data.wallets || []);
+      setTraders([...traderArray]);
     };
 
     return () => {
@@ -151,7 +150,14 @@ export default function App() {
         <CssBaseline />
 
         {/* Navigation Tabs */}
-        <Box sx={{ p: 2, borderBottom: '1px solid #333', display: 'flex', gap: 6 }}>
+        <Box 
+          sx={{ 
+            p: 2, 
+            borderBottom: '1px solid #333', 
+            display: 'flex', 
+            gap: 6,
+            backgroundColor: '#00000080',
+          }}>
           {['feed', 'portfolio', 'traders', 'analytics', 'settings'].map((tab) => (
             <Typography
               key={tab}
@@ -169,11 +175,12 @@ export default function App() {
           ))}
         </Box>
 
+        {/* Main Content Area */}
         <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Sidebar List Area - Only show for Portfolio and Traders tabs */}
           {activeTab !== 'analytics' && activeTab !== 'feed' && (
             <Box sx={{ width: 350, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
-              <Box sx={{ p: 2, borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Box sx={{ p: 2, backgroundColor: '#00000050', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="overline">
                   Sort by {activeTab === 'portfolio' ? 'Price' : 'PnL'}
                 </Typography>
@@ -190,7 +197,7 @@ export default function App() {
                 </Button>
               </Box>
               
-              <List sx={{ overflowY: 'auto', flex: 1 }}>
+              <List sx={{ overflowY: 'auto', backgroundColor: '#00000050', flex: 1 }}>
                 {activeTab === 'portfolio' ? (
                   sortedCoins.map((coin) => (
                     <CoinListItem
@@ -216,7 +223,7 @@ export default function App() {
           )}
 
           {/* Main Detail Area */}
-          <Box sx={{ flex: 1, overflowY: 'auto' }}>
+          <Box sx={{ flex: 1, backgroundColor: '#00000009', overflowY: 'auto' }}>
             <Box sx={{ display: activeTab === 'feed' ? 'block' : 'none'}}>
               <LiveFeedView />
             </Box>
