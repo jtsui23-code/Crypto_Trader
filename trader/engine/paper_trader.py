@@ -13,6 +13,7 @@ import threading
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
+
 from discord_notifier import send_discord_alert_sync
 
 load_dotenv()
@@ -1618,6 +1619,8 @@ class PaperAccount:
         )
 
 
+
+
         self._broadcast_updates({
             "symbol": token_symbol,
             "side": "BUY",
@@ -1842,6 +1845,7 @@ class PaperAccount:
             f"Balance: ${self.balance:.2f}"
         )
 
+
         self._broadcast_updates({
             "symbol": token_symbol,
             "side": "SELL",
@@ -1949,6 +1953,10 @@ class PaperAccount:
             f"Proceeds: ${proceeds:.2f} @ ${slipped_price:.6f}\n"
             f"Balance: ${self.balance:.2f}"
         )
+
+
+
+
 
         self._broadcast_updates({
             "symbol": token_symbol,
