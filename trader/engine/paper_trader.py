@@ -13,6 +13,7 @@ import threading
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
+from discord_notifier import send_discord_alert_sync
 
 load_dotenv()
 
@@ -1598,6 +1599,8 @@ class PaperAccount:
             usd_value=amount_usd,
         )
 
+
+
         spend_price_str = f"${price_spend:.6f}" if price_spend is not None else "trusted"
         print(
             f"  [BUY] {token_symbol} | "
@@ -1608,6 +1611,14 @@ class PaperAccount:
             f"Tokens {tokens_bought:.4f} | "
             f"Balance ${self.balance:.2f}"
         )
+
+        send_discord_alert_sync(
+            f"🟢 **BUY** `{token_symbol[:20]}`\n"
+            f"Whale: `{wallet_address[:8]}...`\n"
+            f"Spent: **${amount_usd:.2f}** @ ${slipped_price:.6f}\n"
+            f"Balance: ${self.balance:.2f}"
+        )
+
 
         self._broadcast_updates({
             "symbol": token_symbol,
@@ -1825,6 +1836,15 @@ class PaperAccount:
             f"--------------------------------------"
         )
 
+        send_discord_alert_sync(
+            f"🟡 **PARTIAL SELL** `{token_symbol[:20]}`\n"
+            f"Reason: **{reason}**\n"
+            f"Sold {fraction*100:.0f}% @ ${slipped_price:.6f}\n"
+            f"Partial PnL: **${realised_pnl:+.2f}**\n"
+            f"Balance: ${self.balance:.2f}"
+        )
+
+
         self._broadcast_updates({
             "symbol": token_symbol,
             "side": "SELL",
@@ -1924,6 +1944,16 @@ class PaperAccount:
             f"Balance ${self.balance:.2f}\n"
             f"--------------------------------------"
         )
+
+        send_discord_alert_sync(
+            f"{'🔴' if realised_pnl < 0 else '🟢'} **SELL** `{token_symbol[:20]}`\n"
+            f"Reason: **{reason}**\n"
+            f"PnL: **${realised_pnl:+.2f}**\n"
+            f"Proceeds: ${proceeds:.2f} @ ${slipped_price:.6f}\n"
+            f"Balance: ${self.balance:.2f}"
+        )
+
+
 
         self._broadcast_updates({
             "symbol": token_symbol,
