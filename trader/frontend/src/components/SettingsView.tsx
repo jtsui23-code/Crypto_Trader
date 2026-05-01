@@ -74,29 +74,21 @@ export function SettingsView() {
   };
 
   const handleReset = async () => {
-  if (!window.confirm(`Reset engine with balance $${balance}? This cannot be undone.`)) return;
-  
-  setIsResetting(true);
-  try {
-    const response = await fetch('http://localhost:8000/api/engine/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ new_balance: balance })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || `Server error: ${response.status}`);
+    setIsResetting(true); // Start animation
+    try {
+      await fetch('http://localhost:8000/api/engine/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_balance: balance })
+      });
+      alert(`Engine reset triggered with balance: $${balance}`);
+    } catch (error) {
+      console.error(error);
+      alert('Failed to reset engine');
+    } finally {
+      setIsResetting(false); 
     }
-
-    alert(`Engine reset successfully with balance: $${balance}`);
-  } catch (error) {
-    console.error(error);
-    alert(`Failed to reset engine: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  } finally {
-    setIsResetting(false);
-  }
-};
+  };
 
 
   return (
