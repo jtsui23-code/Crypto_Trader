@@ -156,6 +156,8 @@ class Trade:
             Quantity of tokens traded.
         timestamp (datetime):
             Execution time of the trade.
+        realised_pnl (float, optional):
+            The realised profit or loss from the trade.
 
     Return:
         None
@@ -164,12 +166,13 @@ class Trade:
         Initializes a Trade object with all relevant
         transaction details for tracking and history storage.
     """
-    def __init__(self, token: str, side: str, price: float, amount: float, timestamp: datetime):
+    def __init__(self, token: str, side: str, price: float, amount: float, timestamp: datetime, realised_pnl=None):
         self.token = token
         self.side = side
         self.price = price
         self.amount = amount
         self.timestamp = timestamp
+        self.realised_pnl = realised_pnl
         
 
 
@@ -1613,10 +1616,14 @@ class PaperAccount:
         )
 
         send_discord_alert_sync(
-            f"🟢 **BUY** `{token_symbol[:20]}`\n"
-            f"Whale: `{wallet_address[:8]}...`\n"
-            f"Spent: **${amount_usd:.2f}** @ ${slipped_price:.6f}\n"
-            f"Balance: ${self.balance:.2f}"
+            title=f"🟢 BUY — {token_symbol[:20]}",
+            fields=[
+                {"name": "Whale",   "value": f"`{wallet_address[:8]}...`",  "inline": True},
+                {"name": "Spent",   "value": f"${amount_usd:.2f}",          "inline": True},
+                {"name": "Price",   "value": f"${slipped_price:.6f}",       "inline": True},
+                {"name": "Balance", "value": f"${self.balance:.2f}",        "inline": False},
+            ],
+            color=0x2ECC71  # green
         )
 
 
@@ -1805,7 +1812,7 @@ class PaperAccount:
 
         now = datetime.now(timezone.utc)
         self.tradeHistory.append(
-            Trade(token_symbol, 'SELL', slipped_price, sell_amount, now)
+            Trade(token_symbol, 'SELL', slipped_price, sell_amount, now, realised_pnl=realised_pnl)
         )
 
         # Persist updated position and account balance
@@ -1837,11 +1844,15 @@ class PaperAccount:
         )
 
         send_discord_alert_sync(
-            f"🟡 **PARTIAL SELL** `{token_symbol[:20]}`\n"
-            f"Reason: **{reason}**\n"
-            f"Sold {fraction*100:.0f}% @ ${slipped_price:.6f}\n"
-            f"Partial PnL: **${realised_pnl:+.2f}**\n"
-            f"Balance: ${self.balance:.2f}"
+            title=f"🟡 PARTIAL SELL — {token_symbol[:20]}",
+            fields=[
+                {"name": "Reason",      "value": reason,                          "inline": True},
+                {"name": "Sold",        "value": f"{fraction*100:.0f}%",          "inline": True},
+                {"name": "Price",       "value": f"${slipped_price:.6f}",         "inline": True},
+                {"name": "Partial PnL", "value": f"${realised_pnl:+.2f}",        "inline": True},
+                {"name": "Balance",     "value": f"${self.balance:.2f}",          "inline": True},
+            ],
+            color=0xF1C40F  # yellow
         )
 
 
@@ -1915,7 +1926,7 @@ class PaperAccount:
         now = datetime.now(timezone.utc)
 
         self.tradeHistory.append(
-            Trade(token_symbol, 'SELL', slipped_price, amount, now)
+            Trade(token_symbol, 'SELL', slipped_price, amount, now, realised_pnl=realised_pnl)
         )
 
         # Persist
@@ -1946,11 +1957,15 @@ class PaperAccount:
         )
 
         send_discord_alert_sync(
-            f"{'🔴' if realised_pnl < 0 else '🟢'} **SELL** `{token_symbol[:20]}`\n"
-            f"Reason: **{reason}**\n"
-            f"PnL: **${realised_pnl:+.2f}**\n"
-            f"Proceeds: ${proceeds:.2f} @ ${slipped_price:.6f}\n"
-            f"Balance: ${self.balance:.2f}"
+            title=f"{'🔴' if realised_pnl < 0 else '🟢'} SELL — {token_symbol[:20]}",
+            fields=[
+                {"name": "Reason",   "value": reason,                    "inline": True},
+                {"name": "PnL",      "value": f"${realised_pnl:+.2f}",  "inline": True},
+                {"name": "Proceeds", "value": f"${proceeds:.2f}",        "inline": True},
+                {"name": "Price",    "value": f"${slipped_price:.6f}",   "inline": True},
+                {"name": "Balance",  "value": f"${self.balance:.2f}",    "inline": False},
+            ],
+            color=0xE74C3C if realised_pnl < 0 else 0x2ECC71  # red or green
         )
 
 
