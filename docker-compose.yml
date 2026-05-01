@@ -1,5 +1,4 @@
 services:
-  # Frontend
   react_frontend:
     build:
       context: ./trader/frontend
@@ -13,8 +12,9 @@ services:
       - CHOKIDAR_USEPOLLING=true
     stdin_open: true
     tty: true
-    
-  # Listener
+    networks:
+      - app-network     
+
   listener:
     build: .
     volumes:
@@ -26,13 +26,13 @@ services:
       react_frontend:
         condition: service_started
     healthcheck:
-      # This checks if the process is actually running inside the container
       test: ["CMD-SHELL", "pgrep -f engine.listener || exit 1"]
       interval: 2s
       timeout: 2s
       retries: 5
+    networks:
+      - app-network     
 
-  # Paper trader
   paper_trader:
     build: .
     volumes:
@@ -45,6 +45,8 @@ services:
         condition: service_healthy
     ports:
       - "8001:8001"
+    networks:
+      - app-network     
   
   api:
     build:
@@ -60,6 +62,8 @@ services:
       - lstm_data:/app/trader/lstm
     working_dir: /app/trader/backend
     command: ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    networks:
+      - app-network     
   
   lstm_predictor:
     build:
@@ -73,6 +77,8 @@ services:
     command: python lstm.py --quiet
     stdin_open: true
     tty: true
+    networks:
+      - app-network     
 
 volumes:
   lstm_data:
