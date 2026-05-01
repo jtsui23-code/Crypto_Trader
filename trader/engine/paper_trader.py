@@ -1616,7 +1616,7 @@ class PaperAccount:
         )
 
         send_discord_alert_sync(
-            title=f"🟢 BUY — {token_symbol[:20]}",
+            title=f"💸 BUY — {token_symbol[:20]}",
             fields=[
                 {"name": "Whale",   "value": f"`{wallet_address[:8]}...`",  "inline": True},
                 {"name": "Spent",   "value": f"${amount_usd:.2f}",          "inline": True},
@@ -1844,7 +1844,7 @@ class PaperAccount:
         )
 
         send_discord_alert_sync(
-            title=f"🟡 PARTIAL SELL — {token_symbol[:20]}",
+            title=f"💰 PARTIAL SELL — {token_symbol[:20]}",
             fields=[
                 {"name": "Reason",      "value": reason,                          "inline": True},
                 {"name": "Sold",        "value": f"{fraction*100:.0f}%",          "inline": True},
@@ -1957,7 +1957,7 @@ class PaperAccount:
         )
 
         send_discord_alert_sync(
-            title=f"{'🔴' if realised_pnl < 0 else '🟢'} SELL — {token_symbol[:20]}",
+            title=f"{'🤬' if realised_pnl < 0 else '💰'} SELL — {token_symbol[:20]}",
             fields=[
                 {"name": "Reason",   "value": reason,                    "inline": True},
                 {"name": "PnL",      "value": f"${realised_pnl:+.2f}",  "inline": True},
