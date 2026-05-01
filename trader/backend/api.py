@@ -424,7 +424,7 @@ def update_config(data: EngineConfig):
 
 # This endpoint allows the frontend to trigger a reset of the paper trading engine, optionally setting a new starting balance.
 @app.post("/api/engine/reset")
-def trigger_engine_reset(data: ResetData):
+async def trigger_engine_reset(data: ResetData):
     try:
         resp = requests.post(f"{ENGINE_URL}/command/reset", json=data.model_dump(), timeout=5)
         return resp.json()
