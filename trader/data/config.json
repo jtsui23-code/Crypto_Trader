@@ -4,5 +4,5 @@
   "take_profit_split": 0.7,
   "trailing_stop_pct": 0.35,
   "stop_loss_pct": 0.15,
-  "max_hold_seconds": 60
+  "max_hold_seconds": 70
 }

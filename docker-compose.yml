@@ -35,6 +35,8 @@ services:
 
   paper_trader:
     build: .
+    env_file:           
+      - ./trader/.env   
     volumes:
       - .:/app
     environment:
