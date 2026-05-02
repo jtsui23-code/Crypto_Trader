@@ -13,7 +13,8 @@ import threading
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
-from trader.engine.discord_notifier import send_discord_alert_sync
+from trader.engine.discord_notifier import send_discord_alert_sync, start_discord_bot
+
 
 load_dotenv()
 
@@ -2339,6 +2340,8 @@ if __name__ == "__main__":
     # reset=False — persisted balance, positions and swap cursor are restored
     # on restart.  Pass reset=True only when you deliberately want a clean slate.
     account = PaperAccount(initialBalance=10000.0, reset=False, generate_config=False)
+
+    start_discord_bot(account)
 
     # Start the FastAPI server in a separate thread so it doesn't block the main trading loop
     cmd_thread = threading.Thread(target=start_engine_api, args=(account,), daemon=True)
