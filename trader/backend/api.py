@@ -224,11 +224,6 @@ async def get_live_feed():
                 "usd_value": float(r[4]),
                 "sell_reason": r[5],
                 "realised_pnl": float(r[6]) if r[6] is not None else None,
-                "pnl_pct": (
-                    round(float(r[6]) / (float(r[4]) - float(r[6])) * 100, 2)
-                    if r[6] is not None and (float(r[4]) - float(r[6])) != 0
-                    else None
-                ),
                 "timestamp": r[7].isoformat() if r[7] else None,
                 "wallet_address": r[8]
             } for r in rows
@@ -430,8 +425,12 @@ def update_config(data: EngineConfig):
 # This endpoint allows the frontend to trigger a reset of the paper trading engine, optionally setting a new starting balance.
 @app.post("/api/engine/reset")
 async def trigger_engine_reset(data: ResetData):
-    try:
-        resp = requests.post(f"{ENGINE_URL}/command/reset", json=data.model_dump(), timeout=5)
-        return resp.json()
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Engine unreachable: {e}")
+    import threading
+    def _do_reset():
+        try:
+            requests.post(f"{ENGINE_URL}/command/reset", json=data.model_dump(), timeout=30)
+        except Exception as e:
+            print(f"[RESET] Engine reset request failed: {e}")
+
+    threading.Thread(target=_do_reset, daemon=True).start()
+    return {"status": "reset triggered"}
