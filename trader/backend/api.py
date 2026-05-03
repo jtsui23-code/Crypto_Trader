@@ -21,7 +21,6 @@ class EngineConfig(BaseModel):
     trailing_stop_pct: float
     stop_loss_pct: float
     max_hold_seconds: int
-    dex_fee_pct: float
 
 class ResetData(BaseModel):
     new_balance: float
@@ -188,8 +187,7 @@ async def get_config():
         "take_profit_split": 0.7,
         "trailing_stop_pct": 0.35,
         "stop_loss_pct": 0.15,
-        "max_hold_seconds": 70,
-        "dex_fee_pct": 0.0025
+        "max_hold_seconds": 70
     }
 
 
@@ -226,6 +224,11 @@ async def get_live_feed():
                 "usd_value": float(r[4]),
                 "sell_reason": r[5],
                 "realised_pnl": float(r[6]) if r[6] is not None else None,
+                "pnl_pct": (
+                    round(float(r[6]) / (float(r[4]) - float(r[6])) * 100, 2)
+                    if r[6] is not None and (float(r[4]) - float(r[6])) != 0
+                    else None
+                ),
                 "timestamp": r[7].isoformat() if r[7] else None,
                 "wallet_address": r[8]
             } for r in rows
