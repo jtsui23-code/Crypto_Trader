@@ -35,10 +35,11 @@ export function SettingsView() {
       .then(data => setWhales(data.wallets.join('\n')))
       .catch(console.error);      
 
-    // Fetch config
+    // Fetch config — merge so any keys missing from the server response
+    // (e.g. dex_fee_pct on older saved configs) fall back to the defaults above.
     fetch('http://localhost:8000/api/settings/config')
       .then(res => res.json())
-      .then(data => setConfig(data))
+      .then(data => setConfig(prev => ({ ...prev, ...data })))
       .catch(console.error);
   }, []);
 
