@@ -278,6 +278,7 @@ def _register_commands(bot: TradingBot):
         trailing_stop_pct = "Max drop from peak before trailing stop fires (e.g. 0.35 = 35%)",
         stop_loss_pct     = "Hard stop-loss below entry (e.g. 0.15 = 15%)",
         max_hold_seconds  = "Max seconds to hold before force-selling (e.g. 70)",
+        dex_fee_pct       = "DEX fee per swap (e.g. 0.0025 = 0.25% for Raydium/Jupiter)",
     )
     async def config(
         interaction: discord.Interaction,
@@ -287,13 +288,14 @@ def _register_commands(bot: TradingBot):
         trailing_stop_pct: float | None = None,
         stop_loss_pct:     float | None = None,
         max_hold_seconds:  int   | None = None,
+        dex_fee_pct:       float | None = None,
     ):
         await interaction.response.defer()
 
         # If no args supplied, just show the current config
         any_provided = any(v is not None for v in [
             risk_per_trade, take_profit_pct, take_profit_split,
-            trailing_stop_pct, stop_loss_pct, max_hold_seconds,
+            trailing_stop_pct, stop_loss_pct, max_hold_seconds, dex_fee_pct,
         ])
 
         if not any_provided:
@@ -312,6 +314,7 @@ def _register_commands(bot: TradingBot):
                 {"name": "📉 Trailing Stop %",    "value": f"`{cfg.get('trailing_stop_pct', '?')}`", "inline": True},
                 {"name": "🛑 Stop Loss %",        "value": f"`{cfg.get('stop_loss_pct', '?')}`",     "inline": True},
                 {"name": "⏱️ Max Hold (secs)",    "value": f"`{cfg.get('max_hold_seconds', '?')}`",  "inline": True},
+                {"name": "💸 DEX Fee %",          "value": f"`{cfg.get('dex_fee_pct', '?')}`",       "inline": True},
             ]
             await interaction.followup.send(
                 embed=_make_embed("⚙️ Engine Configuration", 0x3498DB, fields)
@@ -335,6 +338,7 @@ def _register_commands(bot: TradingBot):
             "trailing_stop_pct": trailing_stop_pct if trailing_stop_pct is not None else current["trailing_stop_pct"],
             "stop_loss_pct":     stop_loss_pct     if stop_loss_pct     is not None else current["stop_loss_pct"],
             "max_hold_seconds":  max_hold_seconds  if max_hold_seconds  is not None else current["max_hold_seconds"],
+            "dex_fee_pct":       dex_fee_pct       if dex_fee_pct       is not None else current.get("dex_fee_pct", 0.0025),
         }
 
         try:
@@ -354,6 +358,7 @@ def _register_commands(bot: TradingBot):
             {"name": "📉 Trailing Stop %",  "value": f"`{payload['trailing_stop_pct']}`", "inline": True},
             {"name": "🛑 Stop Loss %",      "value": f"`{payload['stop_loss_pct']}`",     "inline": True},
             {"name": "⏱️ Max Hold (secs)",  "value": f"`{payload['max_hold_seconds']}`",  "inline": True},
+            {"name": "💸 DEX Fee %",        "value": f"`{payload['dex_fee_pct']}`",       "inline": True},
         ]
         await interaction.followup.send(
             embed=_make_embed("✅ Configuration Updated", 0x2ECC71, fields)

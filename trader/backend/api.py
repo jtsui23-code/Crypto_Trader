@@ -224,6 +224,11 @@ async def get_live_feed():
                 "usd_value": float(r[4]),
                 "sell_reason": r[5],
                 "realised_pnl": float(r[6]) if r[6] is not None else None,
+                "pnl_pct": (
+                    round(float(r[6]) / (float(r[4]) - float(r[6])) * 100, 2)
+                    if r[6] is not None and (float(r[4]) - float(r[6])) != 0
+                    else None
+                ),
                 "timestamp": r[7].isoformat() if r[7] else None,
                 "wallet_address": r[8]
             } for r in rows

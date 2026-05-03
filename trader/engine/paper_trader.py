@@ -1805,6 +1805,7 @@ class PaperAccount:
         proceeds        = sell_amount * slipped_price
         partial_cost    = pos["cost_basis"] * fraction
         realised_pnl    = proceeds - partial_cost
+        pnl_pct         = (realised_pnl / partial_cost * 100) if partial_cost else 0.0
 
         self.balance       += proceeds
         pos["amount"]      -= sell_amount
@@ -1838,7 +1839,7 @@ class PaperAccount:
             f"Sold {fraction*100:.0f}% ({sell_amount:.4f} tokens) |\n "
             f"Price ${slipped_price:.6f} |\n "
             f"Proceeds ${proceeds:.2f} |\n "
-            f"Partial PnL ${realised_pnl:+.2f} |\n "
+            f"Partial PnL ${realised_pnl:+.2f} ({pnl_pct:+.2f}%) |\n "
             f"Remaining {pos['amount']:.4f} tokens | "
             f"Balance ${self.balance:.2f}\n"
             f"--------------------------------------"
@@ -1847,11 +1848,11 @@ class PaperAccount:
         send_discord_alert_sync(
             title=f"💰 PARTIAL SELL — {token_symbol[:20]}",
             fields=[
-                {"name": "Reason",      "value": reason,                          "inline": True},
-                {"name": "Sold",        "value": f"{fraction*100:.0f}%",          "inline": True},
-                {"name": "Price",       "value": f"${slipped_price:.6f}",         "inline": True},
-                {"name": "Partial PnL", "value": f"${realised_pnl:+.2f}",        "inline": True},
-                {"name": "Balance",     "value": f"${self.balance:.2f}",          "inline": True},
+                {"name": "Reason",      "value": reason,                                    "inline": True},
+                {"name": "Sold",        "value": f"{fraction*100:.0f}%",                    "inline": True},
+                {"name": "Price",       "value": f"${slipped_price:.6f}",                   "inline": True},
+                {"name": "Partial PnL", "value": f"${realised_pnl:+.2f} ({pnl_pct:+.2f}%)", "inline": True},
+                {"name": "Balance",     "value": f"${self.balance:.2f}",                    "inline": True},
             ],
             color=0xF1C40F  # yellow
         )
@@ -1865,12 +1866,10 @@ class PaperAccount:
             "usd_value": proceeds,
             "sell_reason": reason,
             "realised_pnl": realised_pnl,
+            "pnl_pct": pnl_pct,
             "timestamp": now.isoformat(),
             "wallet_address": wallet_address
         })
-
-        # -----------------------------------------------------------------------
-        # Trade counter — increment on every partial sell event as well
         # -----------------------------------------------------------------------
         self.trade_count += 1
         print(
@@ -1921,6 +1920,7 @@ class PaperAccount:
         slipped_price = price * 0.98
         proceeds = amount * slipped_price
         realised_pnl = proceeds - pos["cost_basis"]
+        pnl_pct      = (realised_pnl / pos["cost_basis"] * 100) if pos["cost_basis"] else 0.0
 
         self.balance += proceeds
         del self.positions[token_mint]
@@ -1952,7 +1952,7 @@ class PaperAccount:
             f"Reason: {reason} |\n "
             f"Price ${slipped_price:.6f} |\n "
             f"Proceeds ${proceeds:.2f} |\n "
-            f"Realised PnL ${realised_pnl:+.2f} |\n "
+            f"Realised PnL ${realised_pnl:+.2f} ({pnl_pct:+.2f}%) |\n "
             f"Balance ${self.balance:.2f}\n"
             f"--------------------------------------"
         )
@@ -1960,11 +1960,11 @@ class PaperAccount:
         send_discord_alert_sync(
             title=f"{'🤬' if realised_pnl < 0 else '💰'} SELL — {token_symbol[:20]}",
             fields=[
-                {"name": "Reason",   "value": reason,                    "inline": True},
-                {"name": "PnL",      "value": f"${realised_pnl:+.2f}",  "inline": True},
-                {"name": "Proceeds", "value": f"${proceeds:.2f}",        "inline": True},
-                {"name": "Price",    "value": f"${slipped_price:.6f}",   "inline": True},
-                {"name": "Balance",  "value": f"${self.balance:.2f}",    "inline": False},
+                {"name": "Reason",   "value": reason,                                   "inline": True},
+                {"name": "PnL",      "value": f"${realised_pnl:+.2f} ({pnl_pct:+.2f}%)", "inline": True},
+                {"name": "Proceeds", "value": f"${proceeds:.2f}",                        "inline": True},
+                {"name": "Price",    "value": f"${slipped_price:.6f}",                  "inline": True},
+                {"name": "Balance",  "value": f"${self.balance:.2f}",                   "inline": False},
             ],
             color=0xE74C3C if realised_pnl < 0 else 0x2ECC71  # red or green
         )
@@ -1979,6 +1979,7 @@ class PaperAccount:
             "usd_value": proceeds,
             "sell_reason": reason,
             "realised_pnl": realised_pnl,
+            "pnl_pct": pnl_pct,
             "timestamp": now.isoformat(),
             "wallet_address": wallet_address
         })
