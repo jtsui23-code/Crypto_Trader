@@ -10,7 +10,8 @@ export function SettingsView() {
     take_profit_split: 0.7,
     trailing_stop_pct: 0.35,
     stop_loss_pct: 0.15,
-    max_hold_seconds: 70
+    max_hold_seconds: 70,
+    dex_fee_pct: 0.0025
   });
 
   const [isResetting, setIsResetting] = useState(false);
@@ -22,7 +23,8 @@ export function SettingsView() {
     take_profit_split: "The portion of the position to sell when the take profit target is hit (e.g., 0.7 = 70%).",
     trailing_stop_pct: "The max percentage price drop allowed from the peak before a full exit.",
     stop_loss_pct: "The max percentage loss allowed from the entry price before a full exit.",
-    max_hold_seconds: "The maximum duration to hold a position before it is automatically sold."
+    max_hold_seconds: "The maximum duration to hold a position before it is automatically sold.",
+    dex_fee_pct: "The DEX trading fee charged per swap on Solana (e.g., 0.0025 = 0.25%). Applied to both buys and sells to simulate real costs. Raydium/Jupiter default is 0.25%."
   };
 
 

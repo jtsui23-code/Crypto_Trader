@@ -21,6 +21,7 @@ class EngineConfig(BaseModel):
     trailing_stop_pct: float
     stop_loss_pct: float
     max_hold_seconds: int
+    dex_fee_pct: float
 
 class ResetData(BaseModel):
     new_balance: float
@@ -187,7 +188,8 @@ async def get_config():
         "take_profit_split": 0.7,
         "trailing_stop_pct": 0.35,
         "stop_loss_pct": 0.15,
-        "max_hold_seconds": 70
+        "max_hold_seconds": 70,
+        "dex_fee_pct": 0.0025
     }
 
 

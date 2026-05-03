@@ -50,6 +50,11 @@ STOP_LOSS_PCT = 0.15
 # Maximum time to hold a position before force-selling (seconds)
 MAX_HOLD_SECONDS = 70  # 3 minutes
 
+# --- DEX Trading Fee ---
+# Applied to every buy and sell to simulate real Solana DEX costs.
+# Raydium and Jupiter typically charge 0.25% per swap (0.0025).
+DEX_FEE_PCT = 0.0025
+
 # ---------------------------------------------------------------------------
 # Other sell thresholds available for future experimentation (not yet active)
 # ---------------------------------------------------------------------------
@@ -69,6 +74,7 @@ if _CONFIG_FILE.exists():
             TRAILING_STOP_PCT = _saved.get("trailing_stop_pct", TRAILING_STOP_PCT)
             STOP_LOSS_PCT = _saved.get("stop_loss_pct", STOP_LOSS_PCT)
             MAX_HOLD_SECONDS = _saved.get("max_hold_seconds", MAX_HOLD_SECONDS)
+            DEX_FEE_PCT = _saved.get("dex_fee_pct", DEX_FEE_PCT)
     except Exception as e:
         print(f"Error loading persistent config: {e}")
 
@@ -1558,6 +1564,10 @@ class PaperAccount:
         slipped_price = price * 1.02
         tokens_bought = amount_usd / slipped_price
         self.balance -= amount_usd
+
+        # Deduct DEX fee from the USD allocation (fee is taken from the swap value)
+        dex_fee = amount_usd * DEX_FEE_PCT
+        self.balance -= dex_fee
         now = datetime.now(timezone.utc)
 
         if token_mint in self.positions:
@@ -1570,7 +1580,7 @@ class PaperAccount:
             existing["amount"]      = total_tokens
             existing["entry_price"] = avg_price
             existing["peak_price"]  = max(existing["peak_price"], slipped_price)
-            existing["cost_basis"] += amount_usd
+            existing["cost_basis"] += amount_usd + dex_fee
             # tp_sold is intentionally preserved — a TP that already fired on
             # the old tokens does not reset just because we averaged in.
         else:
@@ -1581,7 +1591,7 @@ class PaperAccount:
                 "entry_price":    slipped_price,
                 "peak_price":     slipped_price,
                 "entry_time":     now,
-                "cost_basis":     amount_usd,
+                "cost_basis":     amount_usd + dex_fee,
                 "wallet_address": wallet_address,
                 "tp_sold":        False,
             }
@@ -1610,6 +1620,7 @@ class PaperAccount:
             f"  [BUY] {token_symbol} | "
             f"Whale: {wallet_address[:8]}... | "
             f"Spent ${amount_usd:.2f} | "
+            f"DEX Fee ${dex_fee:.4f} ({DEX_FEE_PCT*100:.2f}%) | "
             f"SpendMint ({spend_mint[:8]}...) {spend_price_str} | "
             f"Price ${slipped_price:.6f} | "
             f"Tokens {tokens_bought:.4f} | "
@@ -1803,6 +1814,8 @@ class PaperAccount:
 
         slipped_price   = price * 0.98
         proceeds        = sell_amount * slipped_price
+        dex_fee         = proceeds * DEX_FEE_PCT
+        proceeds       -= dex_fee
         partial_cost    = pos["cost_basis"] * fraction
         realised_pnl    = proceeds - partial_cost
 
@@ -1920,6 +1933,8 @@ class PaperAccount:
 
         slipped_price = price * 0.98
         proceeds = amount * slipped_price
+        dex_fee  = proceeds * DEX_FEE_PCT
+        proceeds -= dex_fee
         realised_pnl = proceeds - pos["cost_basis"]
 
         self.balance += proceeds
@@ -2309,6 +2324,7 @@ def start_engine_api(account_instance):
         trailing_stop_pct: float = None
         stop_loss_pct: float = None
         max_hold_seconds: int = None
+        dex_fee_pct: float = None
 
     @app.post('/command/reset')
     def reset_engine(data: ResetData):
@@ -2318,7 +2334,7 @@ def start_engine_api(account_instance):
     @app.post('/command/update_config')
     def update_config(data: ConfigData):
         global RISK_PER_TRADE, TAKE_PROFIT_PCT, TAKE_PROFIT_SPLIT
-        global TRAILING_STOP_PCT, STOP_LOSS_PCT, MAX_HOLD_SECONDS
+        global TRAILING_STOP_PCT, STOP_LOSS_PCT, MAX_HOLD_SECONDS, DEX_FEE_PCT
         
         if data.risk_per_trade is not None: RISK_PER_TRADE = data.risk_per_trade
         if data.take_profit_pct is not None: TAKE_PROFIT_PCT = data.take_profit_pct
@@ -2326,6 +2342,7 @@ def start_engine_api(account_instance):
         if data.trailing_stop_pct is not None: TRAILING_STOP_PCT = data.trailing_stop_pct
         if data.stop_loss_pct is not None: STOP_LOSS_PCT = data.stop_loss_pct
         if data.max_hold_seconds is not None: MAX_HOLD_SECONDS = data.max_hold_seconds
+        if data.dex_fee_pct is not None: DEX_FEE_PCT = data.dex_fee_pct
         
         # SET A FLAG instead of doing database operations in this thread
         account_instance.reload_requested = True
