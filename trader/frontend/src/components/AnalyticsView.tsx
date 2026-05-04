@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Grid, Paper, Skeleton } from '@mui/material';
+import { Box, Typography, Grid, Paper, Skeleton, Stack } from '@mui/material';
 import { PieChart } from '@mui/x-charts/PieChart';
+import { LineChart } from '@mui/x-charts/LineChart';
 
 export const AnalyticsView = () => {
   const [data, setData] = useState<any>(null);
@@ -88,6 +89,11 @@ export const AnalyticsView = () => {
     justifyContent: 'center'
   };
 
+  const pnlData = data.pnl_history || [];
+  const hasPnlData = pnlData.length > 0;
+  const xAxisData = pnlData.map((d: any) => new Date(d.time));
+  const yAxisData = pnlData.map((d: any) => d.pnl);
+
   return (
     <Box sx={{ p: 4 }}>
       {/* Header section with Title and Timestamp */}
@@ -101,85 +107,126 @@ export const AnalyticsView = () => {
         </Box>
       </Box>
 
-      <Grid container spacing={3}>
-        {/* Top Row: System Dashboard */}
-        <Grid item xs={12} md={4}>
-          <Paper variant="outlined" sx={cardStyle}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="overline" color="text.secondary">Current Balance</Typography>
-              <Typography variant="h3" sx={{ my: 1 }}>
-                ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Start Balance: ${initial.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </Typography>
-              <Typography variant="body2" sx={{ color: pnl >= 0 ? '#4caf50' : '#f87171', fontWeight: 'bold', mt: 0.5 }}>
-                {pnl >= 0 ? '+' : ''}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pnlPercent}%)
-              </Typography>
-            </Box>
-          </Paper>
-        </Grid>
+      {/* Force explicit vertical rows using Stack */}
+      <Stack spacing={3}>
 
-        <Grid item xs={12} md={4}>
-          <Paper variant="outlined" sx={cardStyle}>
-            <Typography variant="overline" color="text.secondary" sx={{ mb: 2 }}>
-              Exit Strategy Breakdown
-            </Typography>
-            <PieChart
-              series={[{
-                data: data.exit_reasons || [],
-                innerRadius: 50,
-                paddingAngle: 2,
-                cornerRadius: 4,
-              }]}
-              height={180}
-              width={180}
-              slotProps={{ legend: { hidden: true } }}
-            />
-          </Paper>
-        </Grid>
+        {/* ============================== */}
+        {/* ROW 1: The Three Top Cards     */}
+        {/* ============================== */}
+        <Grid container spacing={3}>
+          {/* Top Row: System Dashboard */}
+          <Grid item xs={12} md={4}>
+            <Paper variant="outlined" sx={cardStyle}>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography variant="overline" color="text.secondary">Current Balance</Typography>
+                <Typography variant="h3" sx={{ my: 1 }}>
+                  ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Start Balance: ${initial.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Typography>
+                <Typography variant="body2" sx={{ color: pnl >= 0 ? '#4caf50' : '#f87171', fontWeight: 'bold', mt: 0.5 }}>
+                  {pnl >= 0 ? '+' : ''}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pnlPercent}%)
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
 
-        <Grid item xs={12} md={4}>
-          <Paper variant="outlined" sx={cardStyle}>
-            <Typography variant="overline" color="text.secondary" sx={{ mb: 2 }}>
-              Token Concentration
-            </Typography>
-            <PieChart
-              series={[{
-                data: data.exposure || [],
-                innerRadius: 50,
-                paddingAngle: 2,
-                cornerRadius: 4,
-              }]}
-              height={180}
-              width={180}
-              slotProps={{ legend: { hidden: true } }}
-            />
-          </Paper>
+          {/* Top Row: Exit strategy breakdown */}
+          <Grid item xs={12} md={4}>
+            <Paper variant="outlined" sx={cardStyle}>
+              <Typography variant="overline" color="text.secondary" sx={{ mb: 2 }}>
+                Exit Strategy Breakdown
+              </Typography>
+              <PieChart
+                series={[{
+                  data: data.exit_reasons || [],
+                  innerRadius: 50,
+                  paddingAngle: 2,
+                  cornerRadius: 4,
+                }]}
+                height={180}
+                width={180}
+                slotProps={{ legend: { hidden: true } }}
+              />
+            </Paper>
+          </Grid>
+              
+          {/* Top Row: Token concentration */}
+          <Grid item xs={12} md={4}>
+            <Paper variant="outlined" sx={cardStyle}>
+              <Typography variant="overline" color="text.secondary" sx={{ mb: 2 }}>
+                Token Concentration
+              </Typography>
+              <PieChart
+                series={[{
+                  data: data.exposure || [],
+                  innerRadius: 50,
+                  paddingAngle: 2,
+                  cornerRadius: 4,
+                }]}
+                height={180}
+                width={180}
+                slotProps={{ legend: { hidden: true } }}
+              />
+            </Paper>
+          </Grid>
         </Grid>
-
-        {/* Bottom Row: LSTM Forecast Chart */}
-        <Grid item xs={12}>
-          <Paper variant="outlined" sx={{ p: 3, border: '1px solid #333', bgcolor: 'background.paper', borderRadius: 2 }}>
-            <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
-              SOL/USD LSTM Price Forecast (14-Day)
-            </Typography>
-            
-            <Box sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2, bgcolor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 450 }}>
-              <img 
-                src={`${API_BASE_URL}/plots/solana_lstm_forecast.png?t=${forecastTimestamp}`}
-                alt="LSTM Prediction Chart"
-                style={{ maxWidth: '100%', height: 'auto' }}
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.src = 'https://via.placeholder.com/800x450?text=Waiting+for+LSTM+Generator...';
-                }}
+        
+        {/* ============================== */}
+        {/* ROW 2: PnL Chart               */}
+        {/* ============================== */}
+        <Paper variant="outlined" sx={{ p: 3, border: '1px solid #333', bgcolor: 'background.paper', borderRadius: 2 }}>
+          <Typography variant="overline" color="text.secondary" sx={{ mb: 2, display: 'block', textAlign: 'center', fontSize: '1rem' }}>
+            Cumulative PnL Performance
+          </Typography>
+          {hasPnlData ? (
+            <Box sx={{ width: '100%', height: 350 }}>
+              <LineChart
+                xAxis={[{ 
+                  data: xAxisData, 
+                  scaleType: 'point',
+                  valueFormatter: (date) => date.toLocaleDateString() 
+                }]}
+                series={[{ 
+                  data: yAxisData, 
+                  label: 'Total PnL ($)',
+                  showMark: false,
+                  area: false,
+                  color: '#208dd1'
+                }]}
+                margin={{ top: 20, bottom: 30, left: 50, right: 20 }}
               />
             </Box>
-          </Paper>
-        </Grid>
+          ) : (
+            <Box sx={{ height: 350, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography color="text.secondary">No PnL history available yet.</Typography>
+            </Box>
+          )}
+        </Paper>
 
-      </Grid>
+        {/* ============================== */}
+        {/* ROW 3: LSTM Forecast Chart     */}
+        {/* ============================== */}
+        <Paper variant="outlined" sx={{ p: 3, border: '1px solid #333', bgcolor: 'background.paper', borderRadius: 2 }}>
+          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
+            SOL/USD LSTM Price Forecast (14-Day)
+          </Typography>
+          
+          <Box sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2, bgcolor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 450 }}>
+            <img 
+              src={`${API_BASE_URL}/plots/solana_lstm_forecast.png?t=${forecastTimestamp}`}
+              alt="LSTM Prediction Chart"
+              style={{ maxWidth: '100%', height: 'auto' }}
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.src = 'https://via.placeholder.com/800x450?text=Waiting+for+LSTM+Generator...';
+              }}
+            />
+          </Box>
+        </Paper>
+
+      </Stack>
     </Box>
   );
 };
