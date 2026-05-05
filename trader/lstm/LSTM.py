@@ -12,6 +12,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_absolute_error
 import time
 from tensorflow.keras.models import load_model
+import json 
 
 # Global variable to control quiet mode 
 QUIET = False
@@ -23,7 +24,7 @@ MODEL_PATH = "/app/trader/lstm/solana_lstm_model.keras"
 # TensorFlow / Keras import guard
 # ---------------------------------------------------------------------------
 
-# Fail early with a clear install message rather than an obscure AttributeError
+# Fail early with a clear install message rather than an AttributeError
 try:
     import tensorflow as tf
     from tensorflow.keras.models import Sequential
@@ -351,6 +352,37 @@ def plot_results(
     mae,
 ):
     actual = df["price"].values
+
+    # --- Export JSON Data for Frontend ---
+    chart_data = []
+    
+    # 1. Historical Actuals
+    for i in range(len(df)):
+        chart_data.append({
+            "date": df.index[i].isoformat(),
+            "actual": float(actual[i]),
+            "predicted": None
+        })
+        
+    # Connect lines seamlessly by overlapping the last actual point
+    if chart_data:
+        chart_data[-1]["predicted"] = chart_data[-1]["actual"]
+        
+    # 2. Forecast Data
+    for i in range(len(forecast_dates)):
+        chart_data.append({
+            "date": forecast_dates[i].isoformat(),
+            "actual": None,
+            "predicted": float(forecast_prices[i])
+        })
+        
+    # Save to disk so the API can read it
+    json_path = "/app/trader/lstm/solana_lstm_data.json"
+    try:
+        with open(json_path, "w") as f:
+            json.dump({"chart_data": chart_data}, f)
+    except Exception as e:
+        print(f"[*] Error saving JSON: {e}")
 
     # Predictions start after the look-back window that follows the training split
     pred_start_idx = len(df) - len(predictions_inv)
