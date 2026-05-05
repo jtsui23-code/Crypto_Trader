@@ -7,8 +7,11 @@ export const AnalyticsView = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
-  // Track the timestamp to bust the image cache and show the last update time
+  // Track the timestamp to show the last update time
   const [forecastTimestamp, setForecastTimestamp] = useState<number>(Date.now());
+  
+  // New state to hold the raw LSTM JSON data
+  const [lstmChartData, setLstmChartData] = useState<any[] | null>(null);
   
   const API_BASE_URL = "http://localhost:8000";
 
@@ -32,12 +35,12 @@ export const AnalyticsView = () => {
       setData(updatedAnalytics); 
     };
 
-    // 3. WebSocket for LSTM Forecast Image
+    // 3. WebSocket for LSTM Forecast Data
     const wsForecast = new WebSocket('ws://localhost:8000/ws/forecast');
     wsForecast.onmessage = (event) => {
       const wsData = JSON.parse(event.data);
-      if (wsData?.url) {
-        // Update the timestamp state to trigger a re-render and image refresh
+      if (wsData?.chart_data) {
+        setLstmChartData(wsData.chart_data);
         setForecastTimestamp(Date.now());
       }
     };
@@ -47,6 +50,17 @@ export const AnalyticsView = () => {
       wsForecast.close();
     };
   }, []);
+
+  let forecastColor = '#f59e0b'; // Default orange
+  if (lstmChartData && lstmChartData.length > 0) {
+    const firstForecast = lstmChartData.find(d => d.predicted !== null)?.predicted;
+    const lastForecast = lstmChartData[lstmChartData.length - 1]?.predicted;
+    
+    if (firstForecast !== undefined && lastForecast !== undefined) {
+      // Green if trending up or flat, Red if trending down
+      forecastColor = lastForecast >= firstForecast ? '#4caf50' : '#f87171';
+    }
+  }
 
   if (loading) {
     return (
@@ -213,17 +227,27 @@ export const AnalyticsView = () => {
             SOL/USD LSTM Price Forecast (14-Day)
           </Typography>
           
-          <Box sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2, bgcolor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 450 }}>
-            <img 
-              src={`${API_BASE_URL}/plots/solana_lstm_forecast.png?t=${forecastTimestamp}`}
-              alt="LSTM Prediction Chart"
-              style={{ maxWidth: '100%', height: 'auto' }}
-              onError={(e) => {
-                const target = e.target as HTMLImageElement;
-                target.src = 'https://via.placeholder.com/800x450?text=Waiting+for+LSTM+Generator...';
-              }}
-            />
-          </Box>
+          {lstmChartData ? (
+            <Box sx={{ width: '100%', height: 450 }}>
+              <LineChart
+                dataset={lstmChartData}
+                xAxis={[{ 
+                  dataKey: 'date', 
+                  scaleType: 'point',
+                  valueFormatter: (val) => new Date(val).toLocaleDateString()
+                }]}
+                series={[
+                  { dataKey: 'actual', label: 'Historical ($)', color: '#208dd1', showMark: false },
+                  { dataKey: 'predicted', label: 'Forecast ($)', color: forecastColor, showMark: false }
+                ]}
+                margin={{ top: 20, bottom: 30, left: 50, right: 20 }}
+              />
+            </Box>
+          ) : (
+            <Box sx={{ height: 450, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography color="text.secondary">Waiting for LSTM Generator data...</Typography>
+            </Box>
+          )}
         </Paper>
 
       </Stack>
