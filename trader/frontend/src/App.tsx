@@ -32,37 +32,63 @@ interface Trader {
   total_pnl: number;
 }
 
-const activeColor = '#208dd1';
-const inactiveColor = '#115e8f';
 
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark',
-    background: {
-      default: '#000000',
-      paper: '#00000090',
-    },
-    text: {
-      primary: '#e6e0f0',
-      secondary: '#acaaae',
-    },
-  },
-  typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-  },
-  components: {
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          backgroundImage: 'none',
-        },
-      },
-    },
-  },
-});
 
 export default function App() {
-  // State for tab management
+  // 1. Add state to track live hex colors for Material-UI
+  const [muiThemeColors, setMuiThemeColors] = useState(() => {
+    const saved = JSON.parse(localStorage.getItem('themeColors') || '{}');
+    return {
+      bg: saved['--bg-color'] || '#01011c',
+      navBg: saved['--nav-bg'] || '#00000080',
+      text: saved['--text-color'] || '#f8fafc',
+      accent: saved['--accent-color'] || '#3b82f6',
+      card: saved['--card-bg'] || '#2a2a35'
+    };
+  });
+
+  // 2. Listen for live color changes from SettingsView
+  useEffect(() => {
+    const handleThemeChange = () => {
+      const saved = JSON.parse(localStorage.getItem('themeColors') || '{}');
+      setMuiThemeColors({
+        bg: saved['--bg-color'] || '#01011c',
+        navBg: saved['--nav-bg'] || '#00000080',
+        text: saved['--text-color'] || '#f8fafc',
+        accent: saved['--accent-color'] || '#3b82f6',
+        card: saved['--card-bg'] || '#2a2a35'
+      });
+    };
+    window.addEventListener('themeChanged', handleThemeChange);
+    return () => window.removeEventListener('themeChanged', handleThemeChange);
+  }, []);
+
+  // 3. Dynamically build the Material-UI theme with actual hex codes
+  const darkTheme = useMemo(() => createTheme({
+    palette: {
+      mode: 'dark',
+      background: {
+        default: 'transparent',
+        paper: muiThemeColors.card,
+      },
+      text: {
+        primary: muiThemeColors.text,
+        secondary: '#acaaae',
+      },
+      primary: {
+        main: muiThemeColors.accent,
+      }
+    },
+    typography: { fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif' },
+    components: {
+      MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },
+    },
+  }), [muiThemeColors]);
+
+  const activeColor = muiThemeColors.accent;
+  const inactiveColor = 'text.secondary';
+
+    // State for tab management
   const [activeTab, setActiveTab] = useState<'feed' | 'portfolio' | 'traders' | 'analytics' | 'settings'>('feed');
   const [selectedCoinId, setSelectedCoinId] = useState<string | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
@@ -177,6 +203,15 @@ export default function App() {
   const selectedCoin = coins.find((c) => c.id === selectedCoinId);
   const selectedTrader = traders.find((t) => t.id === selectedTraderId);
 
+  useEffect(() => {
+    // Apply saved colors globally on initial load
+    const savedColors = JSON.parse(localStorage.getItem('themeColors') || '{}');
+    const root = document.documentElement;
+    Object.entries(savedColors).forEach(([key, value]) => {
+      root.style.setProperty(key, value as string);
+    });
+  }, []);
+
   // Render
   return (
     <ThemeProvider theme={darkTheme}>
@@ -187,10 +222,10 @@ export default function App() {
         <Box 
           sx={{ 
             p: 2, 
-            borderBottom: '1px solid #333', 
+            borderBottom: 1, 
             display: 'flex', 
             gap: 6,
-            backgroundColor: '#00000080',
+            backgroundColor: muiThemeColors.navBg,
           }}>
           {['feed', 'portfolio', 'traders', 'analytics', 'settings'].map((tab) => (
             <Typography
@@ -210,18 +245,18 @@ export default function App() {
         </Box>
 
         {/* Main Content Area */}
-        <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', backgroundColor: 'transparent' }}>
           {/* Sidebar List Area - Only show for Portfolio and Traders tabs */}
           {activeTab !== 'analytics' && activeTab !== 'feed' && (
-            <Box sx={{ width: 350, borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
-              <Box sx={{ p: 2, backgroundColor: '#00000050', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box sx={{ width: 350, borderRight: 1, display: 'flex', flexDirection: 'column' }}>
+              <Box sx={{ p: 2, backgroundColor: 'background.paper', borderBottom: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="overline">
                   Sort by {activeTab === 'portfolio' ? 'Price' : 'PnL'}
                 </Typography>
                 <Button
                   size="small"
                   variant="outlined"
-                  sx={{ color: activeColor, borderColor: '#333' }}
+                  sx={{ color: activeColor, borderColor: 'divider' }}
                   onClick={() => {
                     if (activeTab === 'portfolio') setCoinSort(prev => prev === 'desc' ? 'asc' : 'desc');
                     else setTraderSort(prev => prev === 'desc' ? 'asc' : 'desc');
@@ -231,7 +266,7 @@ export default function App() {
                 </Button>
               </Box>
               
-              <List sx={{ overflowY: 'auto', backgroundColor: '#00000050', flex: 1 }}>
+              <List sx={{ overflowY: 'auto', backgroundColor: 'background.paper', flex: 1 }}>
                 {activeTab === 'portfolio' ? (
                   sortedCoins.map((coin) => (
                     <CoinListItem
@@ -251,7 +286,7 @@ export default function App() {
                       isPinned={pinnedTraders.includes(trader.id)}
                       onSelect={() => setSelectedTraderId(trader.id)}
                       onTogglePin={(e) => {
-                        e.stopPropagation(); // Prevents row selection when clicking the star
+                        e.stopPropagation(); 
                         setPinnedTraders(prev => 
                           prev.includes(trader.id) 
                             ? prev.filter(id => id !== trader.id) 
@@ -266,7 +301,7 @@ export default function App() {
           )}
 
           {/* Main Detail Area */}
-          <Box sx={{ flex: 1, backgroundColor: '#00000009', overflowY: 'auto' }}>
+          <Box sx={{ flex: 1, backgroundColor: 'transparent', overflowY: 'auto' }}>
             <Box sx={{ display: activeTab === 'feed' ? 'block' : 'none'}}>
               <LiveFeedView />
             </Box>

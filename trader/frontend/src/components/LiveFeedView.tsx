@@ -13,7 +13,6 @@ interface TradeEvent {
   wallet_address: string;
 }
 
-const updateIntervalMs = 3000;
 
 export function LiveFeedView() {
   const [feed, setFeed] = useState<TradeEvent[]>([]);
@@ -91,7 +90,7 @@ export function LiveFeedView() {
             </Typography>
           )}
           {accountBalance !== null && (
-            <Typography variant="subtitle1" sx={{ color: '#4caf50', fontFamily: 'monospace' }}>
+            <Typography variant="subtitle1" sx={{ color: 'success.main', fontFamily: 'monospace' }}>
               Available Cash: ${accountBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </Typography>
           )}
@@ -101,10 +100,10 @@ export function LiveFeedView() {
       {/* Feed List */}
       <List>
         {feed.map((trade, i) => (
-          <ListItem key={i} component={Paper} sx={{ mb: 2, p: 2, bgcolor: '#000000e4', borderRadius: 2, 
-            borderLeft: `1px solid ${trade.side === 'BUY' ? '#2e7d32' : '#c62828'}`,
+          <ListItem key={i} component={Paper} sx={{ mb: 2, p: 2, bgcolor: 'background.paper', borderRadius: 2, 
+            borderLeft: `1px solid ${trade.side === 'BUY' ? 'success.main' : 'error.main'}`,
             borderRight: (trade.side === 'SELL' && trade.realised_pnl !== null) 
-              ? `1px solid ${trade.realised_pnl > 0 ? '#4caf50' : '#f44336'}` 
+              ? `1px solid ${trade.realised_pnl > 0 ? 'success.main' : 'error.main'}` 
               : 'none'
           }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
@@ -115,7 +114,7 @@ export function LiveFeedView() {
                   <Chip
                     label={trade.side}
                     size="small"
-                    sx={{ bgcolor: trade.side === 'BUY' ? '#1b5e20' : '#b71c1c', color: 'white', fontWeight: 'bold' }}
+                    sx={{ bgcolor: trade.side === 'BUY' ? 'success.main' : 'error.main', color: 'primary.main', fontWeight: 'bold' }}
                   />
                   {trade.symbol}
                 </Typography>
@@ -142,7 +141,7 @@ export function LiveFeedView() {
                       <Chip label={trade.sell_reason.replace('_', ' ')} size="small" variant="outlined" sx={{ mb: 0.5, borderColor: '#555' }} />
                     )}
                     {trade.realised_pnl !== null && (
-                      <Typography variant="body2" sx={{ color: trade.realised_pnl > 0 ? '#4caf50' : '#f44336', fontWeight: 'bold' }}>
+                      <Typography variant="body2" sx={{ color: trade.realised_pnl > 0 ? 'success.main' : 'error.main', fontWeight: 'bold' }}>
                         PnL: {trade.realised_pnl > 0 ? '+' : ''}${trade.realised_pnl.toFixed(2)}
                       </Typography>
                     )}
