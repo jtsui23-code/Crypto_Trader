@@ -10,7 +10,7 @@ interface CoinListItemProps {
 
 // CoinListItem component for displaying individual coin positions in the sidebar list
 export const CoinListItem = memo(({ symbol, entry_price, isSelected, onSelect }: CoinListItemProps) => (
-  <ListItem disablePadding sx={{ borderBottom: '1px solid #333' }}>
+  <ListItem disablePadding sx={{ borderBottom: 1 }}>
     <ListItemButton 
       onClick={onSelect} 
       selected={isSelected}
@@ -22,9 +22,9 @@ export const CoinListItem = memo(({ symbol, entry_price, isSelected, onSelect }:
     >
       <ListItemAvatar>
         <Avatar sx={{ 
-          border: '1px solid #333', 
+          border: 1, borderColor: 'divider', 
           bgcolor: 'background.paper', 
-          color: '#fff',
+          color: 'primary.main',
           fontSize: '0.8rem' 
         }}>
           {symbol.substring(0, 3).toUpperCase()}

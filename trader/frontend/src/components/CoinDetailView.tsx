@@ -29,23 +29,23 @@ export const CoinDetailView = ({ coin }: { coin: Coin | null | undefined }) => {
       <Divider sx={{ mb: 4 }} />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 3 }}>
-        <Paper variant="outlined" sx={{ p: 2, border: '1px solid #333' }}>
+        <Paper variant="outlined" sx={{ p: 2, border: 1, borderColor: 'divider' }}>
           <Typography variant="overline">Holdings</Typography>
           <Typography variant="h6">{coin.amount.toLocaleString()}</Typography>
         </Paper>
-        <Paper variant="outlined" sx={{ p: 2, border: '1px solid #333' }}>
+        <Paper variant="outlined" sx={{ p: 2, border: 1, borderColor: 'divider' }}>
           <Typography variant="overline">Cost Basis</Typography>
           <Typography variant="h6">${coin.cost_basis.toFixed(2)}</Typography>
         </Paper>
       </Box>
 
-      <Paper variant="outlined" sx={{ p: 2, mb: 2, border: '1px solid #333' }}>
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, border: 1, borderColor: 'divider'}}>
         <Typography variant="overline">Entry Price</Typography>
         <Typography variant="h6">${coin.entry_price.toFixed(8)}</Typography>
       </Paper>
 
-      <Paper variant="outlined" sx={{ p: 2, border: '1px solid #333' }}>
-        <Typography variant="overline" sx={{ color: '1px solid #333' }}>Source Whale</Typography>
+      <Paper variant="outlined" sx={{ p: 2, border: 1, borderColor: 'divider' }}>
+        <Typography variant="overline">Source Whale</Typography>
         <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
           {coin.wallet_address}
         </Typography>

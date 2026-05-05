@@ -94,7 +94,7 @@ export const AnalyticsView = () => {
 
   const cardStyle = {
     p: 2,
-    border: '1px solid #333',
+    border: 1, borderColor: 'divider',
     bgcolor: 'background.paper',
     height: 280,
     display: 'flex',
@@ -112,8 +112,8 @@ export const AnalyticsView = () => {
     <Box sx={{ p: 4 }}>
       {/* Header section with Title and Timestamp */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" sx={{ color: '#208dd1' }}>System Analytics</Typography>
-        <Box sx={{ px: 2, py: 1, bgcolor: '#1e1e1e', borderRadius: 2, border: '1px solid #333' }}>
+        <Typography variant="h4" sx={{ color: 'primary.main' }}>System Analytics</Typography>
+        <Box sx={{ px: 2, py: 1, bgcolor: 'background.paper', borderRadius: 2, border: 1, borderColor: 'divider' }}>
           <Typography variant="caption" color="text.secondary">Last Update: </Typography>
           <Typography variant="body2" component="span" sx={{ fontFamily: 'monospace' }}>
             {new Date(forecastTimestamp).toLocaleTimeString()}
@@ -139,7 +139,7 @@ export const AnalyticsView = () => {
                 <Typography variant="body2" color="text.secondary">
                   Start Balance: ${initial.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Typography>
-                <Typography variant="body2" sx={{ color: pnl >= 0 ? '#4caf50' : '#f87171', fontWeight: 'bold', mt: 0.5 }}>
+                <Typography variant="body2" sx={{ color: pnl >= 0 ? 'success.main' : 'error.main', fontWeight: 'bold', mt: 0.5 }}>
                   {pnl >= 0 ? '+' : ''}${pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ({pnlPercent}%)
                 </Typography>
               </Box>
@@ -190,7 +190,7 @@ export const AnalyticsView = () => {
         {/* ============================== */}
         {/* ROW 2: PnL Chart               */}
         {/* ============================== */}
-        <Paper variant="outlined" sx={{ p: 3, border: '1px solid #333', bgcolor: 'background.paper', borderRadius: 2 }}>
+        <Paper variant="outlined" sx={{ p: 3, border: 1, borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2 }}>
           <Typography variant="overline" color="text.secondary" sx={{ mb: 2, display: 'block', textAlign: 'center', fontSize: '1rem' }}>
             Cumulative PnL Performance
           </Typography>
@@ -207,7 +207,7 @@ export const AnalyticsView = () => {
                   label: 'Total PnL ($)',
                   showMark: false,
                   area: false,
-                  color: '#208dd1'
+                  color: 'var(--accent-color)'
                 }]}
                 margin={{ top: 20, bottom: 30, left: 50, right: 20 }}
               />
@@ -222,7 +222,7 @@ export const AnalyticsView = () => {
         {/* ============================== */}
         {/* ROW 3: LSTM Forecast Chart     */}
         {/* ============================== */}
-        <Paper variant="outlined" sx={{ p: 3, border: '1px solid #333', bgcolor: 'background.paper', borderRadius: 2 }}>
+        <Paper variant="outlined" sx={{ p: 3, border: 1, borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2 }}>
           <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
             SOL/USD LSTM Price Forecast (14-Day)
           </Typography>
@@ -237,7 +237,7 @@ export const AnalyticsView = () => {
                   valueFormatter: (val) => new Date(val).toLocaleDateString()
                 }]}
                 series={[
-                  { dataKey: 'actual', label: 'Historical ($)', color: '#208dd1', showMark: false },
+                  { dataKey: 'actual', label: 'Historical ($)', color: 'var(--accent-color)', showMark: false },
                   { dataKey: 'predicted', label: 'Forecast ($)', color: forecastColor, showMark: false }
                 ]}
                 margin={{ top: 20, bottom: 30, left: 50, right: 20 }}
