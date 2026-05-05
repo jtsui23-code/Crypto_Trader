@@ -13,7 +13,7 @@ import threading
 import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
-from trader.engine.discord_notifier import send_discord_alert_sync, start_discord_bot
+from trader.engine.discord_bot import send_discord_alert_sync, start_discord_bot
 
 
 load_dotenv()
