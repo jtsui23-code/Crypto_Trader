@@ -91,6 +91,17 @@ async def websocket_endpoint(websocket: WebSocket, channel: str):
         return
         
     await manager.connect(websocket, channel)
+    
+    # --- Send initial data on connect ---
+    if channel == "forecast":
+        try:
+            lstm_json_path = "/app/trader/lstm/solana_lstm_data.json"
+            if os.path.exists(lstm_json_path):
+                with open(lstm_json_path, "r") as f:
+                    await websocket.send_json(json.load(f))
+        except Exception as e:
+            print(f"Error sending initial forecast data: {e}")
+
     try:
         while True:
             await websocket.receive_text() # Keep connection alive
@@ -105,10 +116,6 @@ async def broadcast_update(channel: str, data: dict):
 
 @app.post("/api/internal/trigger/{channel}")
 async def trigger_channel_update(channel: str):
-    """
-    Called by the engine to tell the API to fetch fresh DB data 
-    and broadcast it to the requested WebSocket channel.
-    """
     if channel not in manager.active_connections:
         return {"error": "Invalid channel"}
     
@@ -118,8 +125,14 @@ async def trigger_channel_update(channel: str):
     elif channel == "summary":
         data = await get_analytics_summary()
     elif channel == "forecast":
-        # Append timestamp to bypass browser image cache
-        data = {"url": f"http://localhost:8000/plots/solana_lstm_forecast.png?t={int(time.time())}"}
+        # --- Read the JSON file and broadcast ---
+        try:
+            lstm_json_path = "/app/trader/lstm/solana_lstm_data.json"
+            if os.path.exists(lstm_json_path):
+                with open(lstm_json_path, "r") as f:
+                    data = json.load(f)
+        except Exception as e:
+            print(f"Error loading forecast JSON: {e}")
         
     if data:
         await manager.broadcast(data, channel)
