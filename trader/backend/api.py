@@ -258,13 +258,30 @@ async def get_analytics_summary():
         cur.execute("SELECT token_symbol, SUM(cost_basis) FROM paper_positions GROUP BY token_symbol")
         exposure = [{"label": e[0], "value": float(e[1])} for e in cur.fetchall()]
         
+        # Get PNL History
+        cur.execute("""
+            SELECT timestamp, realised_pnl 
+            FROM paper_trades 
+            WHERE realised_pnl IS NOT NULL 
+            ORDER BY timestamp ASC
+        """)
+        pnl_history = []
+        cum_pnl = 0.0
+        for t in cur.fetchall():
+            cum_pnl += float(t[1])
+            pnl_history.append({
+                "time": t[0].isoformat() if t[0] else None,
+                "pnl": cum_pnl
+            })
+            
         cur.close()
         conn.close()
         
         return {
             "account": account_data,
             "exit_reasons": reasons,
-            "exposure": exposure
+            "exposure": exposure,
+            "pnl_history": pnl_history
         }
     except Exception as e:
         return {"error": str(e)}

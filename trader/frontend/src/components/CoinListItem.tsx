@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { ListItem, ListItemButton, ListItemAvatar, Avatar, ListItemText } from '@mui/material';
 
 interface CoinListItemProps {
@@ -8,7 +9,7 @@ interface CoinListItemProps {
 }
 
 // CoinListItem component for displaying individual coin positions in the sidebar list
-export const CoinListItem = ({ symbol, entry_price, isSelected, onSelect }: CoinListItemProps) => (
+export const CoinListItem = memo(({ symbol, entry_price, isSelected, onSelect }: CoinListItemProps) => (
   <ListItem disablePadding sx={{ borderBottom: '1px solid #333' }}>
     <ListItemButton 
       onClick={onSelect} 
@@ -35,4 +36,4 @@ export const CoinListItem = ({ symbol, entry_price, isSelected, onSelect }: Coin
       />
     </ListItemButton>
   </ListItem>
-);
+));
