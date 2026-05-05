@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Box, List, Typography, CssBaseline, Button } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
@@ -71,9 +71,20 @@ export default function App() {
   const [coins, setCoins] = useState<Coin[]>([]);
   const [traders, setTraders] = useState<Trader[]>([]);
 
+  const latestCoins = useRef<Coin[] | null>(null);
+  const latestTraders = useRef<Trader[] | null>(null);
+
   // Sorting statess
   const [traderSort, setTraderSort] = useState<'desc' | 'asc'>('desc');
   const [coinSort, setCoinSort] = useState<'desc' | 'asc'>('desc');
+
+  
+  // Pinned Traders State
+  const [pinnedTraders, setPinnedTraders] = useState<string[]>(() => {
+    const saved = localStorage.getItem('pinnedTraders');
+    return saved ? JSON.parse(saved) : [];
+  });
+
 
   // Fetch functions
   const fetchTraders = () => {
@@ -97,47 +108,70 @@ export default function App() {
       .catch(console.error);
   };
 
+  // Save pinned traders to local storage whenever they change
+  const fetchPinnedTraders = () => {
+    localStorage.setItem('pinnedTraders', JSON.stringify(pinnedTraders));
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (latestCoins.current) {
+        setCoins(latestCoins.current);
+        latestCoins.current = null;
+      }
+      if (latestTraders.current) {
+        setTraders([...latestTraders.current]);
+        latestTraders.current = null;
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
   // Initial data fetch and setup auto-refresh
   useEffect(() => {
     fetchCoins();
     fetchTraders();
+    fetchPinnedTraders();
 
     const wsPositions = new WebSocket('ws://localhost:8000/ws/positions');
     wsPositions.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      const coinsArray = Array.isArray(data) ? data : (data.positions || []);
-      setCoins(coinsArray);
-      setCoins((prev) => {
-         if (prev.length > 0 && !selectedCoinId) setSelectedCoinId(prev[0].id);
-         return prev;
-      });
+      latestCoins.current = Array.isArray(data) ? data : (data.positions || []);
     };
 
     const wsTraders = new WebSocket('ws://localhost:8000/ws/traders');
     wsTraders.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      const traderArray = Array.isArray(data) ? data : (data.wallets || []);
-      setTraders([...traderArray]);
+      latestTraders.current = Array.isArray(data) ? data : (data.wallets || []);
     };
 
     return () => {
       wsPositions.close();
       wsTraders.close();
     };
-  }, []);
+  }, [pinnedTraders]);
 
-  // Sorting logic
-  const sortedTraders = [...traders].sort((a, b) => {
-    const pnlA = a.total_pnl || 0;
-    const pnlB = b.total_pnl || 0;
-    return traderSort === 'desc' ? pnlB - pnlA : pnlA - pnlB;
-  });
+  // Sorting logic (Pins first, then by PnL)
+  const sortedTraders = useMemo(() => {
+    return [...traders].sort((a, b) => {
+      const aPinned = pinnedTraders.includes(a.id);
+      const bPinned = pinnedTraders.includes(b.id);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
 
-  const sortedCoins = [...coins].sort((a, b) => {
-    const priceA = a.entry_price || 0;
-    const priceB = b.entry_price || 0;
-    return coinSort === 'desc' ? priceB - priceA : priceA - priceB;
-  });
+      const pnlA = a.total_pnl || 0;
+      const pnlB = b.total_pnl || 0;
+      return traderSort === 'desc' ? pnlB - pnlA : pnlA - pnlB;
+    });
+  }, [traders, traderSort, pinnedTraders]);
+
+  const sortedCoins = useMemo(() => {
+    return [...coins].sort((a, b) => {
+      const priceA = a.entry_price || 0;
+      const priceB = b.entry_price || 0;
+      return coinSort === 'desc' ? priceB - priceA : priceA - priceB;
+    });
+  }, [coins, coinSort]);
  
   // Find selected items
   const selectedCoin = coins.find((c) => c.id === selectedCoinId);
@@ -214,7 +248,16 @@ export default function App() {
                       name={trader.name}
                       record={trader.record}
                       isSelected={selectedTraderId === trader.id}
+                      isPinned={pinnedTraders.includes(trader.id)}
                       onSelect={() => setSelectedTraderId(trader.id)}
+                      onTogglePin={(e) => {
+                        e.stopPropagation(); // Prevents row selection when clicking the star
+                        setPinnedTraders(prev => 
+                          prev.includes(trader.id) 
+                            ? prev.filter(id => id !== trader.id) 
+                            : [...prev, trader.id]
+                        );
+                      }}
                     />
                   ))
                 )}
