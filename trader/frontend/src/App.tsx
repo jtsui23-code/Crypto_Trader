@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Box, List, Typography, CssBaseline, Button } from '@mui/material';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 
@@ -111,6 +111,14 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
+  const handleSelectCoin = useCallback((id: string) => setSelectedCoinId(id), []);
+  const handleSelectTrader = useCallback((id: string) => setSelectedTraderId(id), []);
+  
+  const handleTogglePin = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation(); 
+    setPinnedTraders(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }, []);
+
 
   // Fetch functions
   const fetchTraders = () => {
@@ -212,6 +220,8 @@ export default function App() {
     });
   }, []);
 
+  
+
   // Render
   return (
     <ThemeProvider theme={darkTheme}>
@@ -271,28 +281,24 @@ export default function App() {
                   sortedCoins.map((coin) => (
                     <CoinListItem
                       key={coin.id}
-                      {...coin}
+                      id={coin.id}
+                      symbol={coin.symbol}
+                      entry_price={coin.entry_price}
                       isSelected={selectedCoinId === coin.id}
-                      onSelect={() => setSelectedCoinId(coin.id)}
+                      onSelect={handleSelectCoin}
                     />
                   ))
                 ) : (
                   sortedTraders.map((trader) => (
                     <TraderListItem
                       key={trader.id}
+                      id={trader.id}
                       name={trader.name}
                       record={trader.record}
                       isSelected={selectedTraderId === trader.id}
                       isPinned={pinnedTraders.includes(trader.id)}
-                      onSelect={() => setSelectedTraderId(trader.id)}
-                      onTogglePin={(e) => {
-                        e.stopPropagation(); 
-                        setPinnedTraders(prev => 
-                          prev.includes(trader.id) 
-                            ? prev.filter(id => id !== trader.id) 
-                            : [...prev, trader.id]
-                        );
-                      }}
+                      onSelect={handleSelectTrader}
+                      onTogglePin={handleTogglePin}
                     />
                   ))
                 )}
