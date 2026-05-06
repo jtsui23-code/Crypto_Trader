@@ -2,12 +2,13 @@ import { memo } from 'react';
 import { ListItem, ListItemButton, ListItemAvatar, Avatar, ListItemText, IconButton } from '@mui/material';
 
 interface TraderProps {
+  id: string;
   name: string;
   record: string;
   isSelected: boolean;
   isPinned: boolean;
-  onSelect: () => void;
-  onTogglePin: (e: React.MouseEvent) => void;
+  onSelect: (id: string) => void;
+  onTogglePin: (id: string, e: React.MouseEvent) => void;
 }
 
 const StarIcon = () => (
@@ -22,48 +23,34 @@ const StarBorderIcon = () => (
   </svg>
 );
 
-export const TraderListItem = memo(({ name, record, isSelected, isPinned, onSelect, onTogglePin }: TraderProps) => (
+export const TraderListItem = memo(({ id, name, record, isSelected, isPinned, onSelect, onTogglePin }: TraderProps) => (
   <ListItem 
     disablePadding 
     sx={{ 
       borderBottom: 1,
-      // Target the wrapper MUI uses for secondaryAction to override the default vertical centering
-      '& .MuiListItemSecondaryAction-root': {
-        top: '0px', 
-        right: '6px',
-        transform: 'none'
-      }
+      '& .MuiListItemSecondaryAction-root': { top: '0px', right: '6px', transform: 'none' }
     }}
     secondaryAction={
-      <IconButton edge="end" onClick={onTogglePin}>
+      <IconButton edge="end" onClick={(e) => onTogglePin(id, e)}>
         {isPinned ? <StarIcon /> : <StarBorderIcon />}
       </IconButton>
     }
   >
     <ListItemButton 
-      onClick={onSelect} 
+      onClick={() => onSelect(id)} 
       selected={isSelected}
       sx={{ 
-        py: 2,
-        pr: 7, 
+        py: 2, pr: 7, 
         '&.Mui-selected': { bgcolor: 'action.selected' },
         '&.Mui-selected:hover': { bgcolor: 'action.hover' }
       }}
     >
       <ListItemAvatar>
-        <Avatar sx={{ 
-          border: 1, borderColor: 'divider', 
-          bgcolor: 'background.paper', 
-          color: 'primary.main',
-          fontSize: '0.8rem' 
-        }}>
+        <Avatar sx={{ border: 1, borderColor: 'divider', bgcolor: 'background.paper', color: 'primary.main', fontSize: '0.8rem' }}>
           {name.substring(0, 3).toUpperCase()}
         </Avatar>
       </ListItemAvatar>
-      <ListItemText 
-        primary={name} 
-        secondary={record} 
-      />
+      <ListItemText primary={name} secondary={record} />
     </ListItemButton>
   </ListItem>
 ));
