@@ -10,6 +10,10 @@ The Crypto Trader Bot is a self-hosted, paper-trading automation system built fo
 ### Analytics Page:
 <img width="1920" height="864" alt="analytics" src="https://github.com/user-attachments/assets/3b1451d8-b49a-4397-97f5-49efe52207fc" />
 
+### Settings Page:
+<img width="1914" height="852" alt="settingsPage" src="https://github.com/user-attachments/assets/3414d750-2c55-4e97-8075-30133ffcfc9f" />
+
+
 
 
 
