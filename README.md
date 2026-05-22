@@ -2,6 +2,17 @@
 ## Description:
 The Crypto Trader Bot is a self-hosted, paper-trading automation system built for the Solana blockchain. Developed by Jack Tsui and Jaxon King, the project provides a safe, free-to-use platform for monitoring and simulating "copy-trading" strategies from high-performing "whale" wallets.
 
+## Showcase:
+
+### Live Feed Page:
+<img width="1920" height="866" alt="livefeed" src="https://github.com/user-attachments/assets/50d9fdbe-8e50-45e5-9f0d-e7f17a38643e" />
+
+
+
+
+
+
+
 ## Setup Instruction:
 1) Download Docker
 2) Enter directory with Dockerfile
