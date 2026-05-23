@@ -16,6 +16,8 @@ The Crypto Trader Bot is a self-hosted, paper-trading automation system built fo
 <img width="1914" height="852" alt="settingsPage" src="https://github.com/user-attachments/assets/3414d750-2c55-4e97-8075-30133ffcfc9f" />
 
 
+## Technologies Used: 
+React, FastAPI, WebSockets, Tailwind CSS, Python, PostgreSQL, Docker
 
 
 
